@@ -520,19 +520,19 @@ def extract_symbols_from_file(file_path: Path) -> list[str]:
             ):
                 symbols.append(match.group(1))
 
-        # C#: class/interface/struct/enum/record and methods
+        # C#: class/interface/struct/enum/record and method definitions
         elif ext == ".cs":
             for match in re.finditer(
-                r"^\s*(?:public|private|protected|internal)?\s*"
-                r"(?:partial\s+)?(?:class|interface|struct|enum|record)\s+(\w+)",
+                r"^(?:public|private|protected|internal)?\s*(?:static\s+)?(?:partial\s+)?"
+                r"(?:class|interface|struct|enum|record)\s+(\w+)",
                 content,
                 re.MULTILINE,
             ):
                 symbols.append(match.group(1))
+            # Method definitions
             for match in re.finditer(
-                r"^\s*(?:public|private|protected|internal)?\s*"
-                r"(?:static\s+)?(?:async\s+)?(?:partial\s+)?"
-                r"[\w<>\[\],\s]+\s+(\w+)\s*\(",
+                r"^\s*(?:public|private|protected|internal)\s+(?:static\s+)?(?:async\s+)?"
+                r"[\w<>\[\]?]+\s+(\w+)\s*\(",
                 content,
                 re.MULTILINE,
             ):

@@ -5,9 +5,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../../LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Plugin-blueviolet)](https://claude.ai/code)
 
-[![Version](https://img.shields.io/badge/Version-0.7.0-green)](../../CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-0.7.1-green)](../../CHANGELOG.md)
 
-[![Version](https://img.shields.io/badge/Version-0.7.0-green)](../../CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-0.7.1-green)](../../CHANGELOG.md)
 
 [![Status](https://img.shields.io/badge/Status-Active_Development-brightgreen)](../../CHANGELOG.md)
 
@@ -406,9 +406,9 @@ Reviews block progress until `<verdict>SHIP</verdict>`. Fix → re-review cycles
 [RepoPrompt](https://repoprompt.com/?atp=KJbuL4) provides the best review experience on macOS.
 
 **Why recommended:**
-- Builder provides full file context with intelligent selection
-- Visual interface for reviewing diffs
-- Maintains conversation history across reviews
+- Best-in-class context builder for reviews (full file context, smart selection)
+- Enables **context-scout** for deeper codebase discovery (alternative: repo-scout works without RP)
+- Visual diff review UI + persistent chat threads
 
 **Setup:**
 ```bash
@@ -729,7 +729,7 @@ There are no task IDs outside an epic. If you want a single task, create an epic
 
 ## flowctl CLI
 
-Bundled Python script for managing `.flow/`. Skills call this automatically, but you can use it directly:
+Bundled Python script for managing `.flow/`. Flow-Next's commands handle epic/task creation automatically—use `flowctl` for direct inspection, fixes, or advanced workflows:
 
 ```bash
 # Setup
@@ -835,9 +835,8 @@ This creates a complete audit trail: what was planned, what was done, how it was
 
 - Python 3.8+
 - git
-- For reviews (optional but highly recommended), one of:
-  - [rp-cli](https://repoprompt.com/?atp=KJbuL4) ([RepoPrompt](https://repoprompt.com/?atp=KJbuL4)) — macOS, GUI-based
-  - OpenAI Codex CLI (`npm install -g @openai/codex`) — cross-platform, terminal-based
+- Optional: [RepoPrompt](https://repoprompt.com/?atp=KJbuL4) for macOS GUI reviews + enables **context-scout** (deeper codebase discovery than repo-scout). Reviews work without it via Codex backend.
+- Optional: OpenAI Codex CLI (`npm install -g @openai/codex`) for cross-platform terminal-based reviews
 
 Without a review backend, reviews are skipped.
 
