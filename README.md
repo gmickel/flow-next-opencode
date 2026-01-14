@@ -131,26 +131,26 @@ flowctl ready --epic fn-1
 ```mermaid
 flowchart TD
   A[Idea or short spec] --> B{Need deeper spec?}
-  B -- yes --> C[Optional: /flow-next:interview fn-N or spec.md]
+  B -- yes --> C["Optional: /flow-next:interview fn-N or spec.md"]
   C --> D[Refined spec]
   B -- no --> D
-  D --> E[/flow-next:plan idea or fn-N]
-  E --> F[Parallel scouts: repo patterns + docs + best practices]
-  F --> G[flow-gap-analyst: edge cases + missing reqs]
-  G --> H[Writes .flow/ epic + tasks + deps]
+  D --> E["/flow-next:plan idea or fn-N"]
+  E --> F["Parallel scouts: repo patterns + docs + best practices"]
+  F --> G["flow-gap-analyst: edge cases + missing reqs"]
+  G --> H["Writes .flow/ epic + tasks + deps"]
   H --> I{Plan review?}
-  I -- yes --> J[/flow-next:plan-review fn-N]
+  I -- yes --> J["/flow-next:plan-review fn-N"]
   J --> K{Plan passes review?}
-  K -- no --> L[Re-anchor + fix plan]
+  K -- no --> L["Re-anchor + fix plan"]
   L --> J
-  K -- yes --> M[/flow-next:work fn-N]
+  K -- yes --> M["/flow-next:work fn-N"]
   I -- no --> M
-  M --> N[Re-anchor before EVERY task]
+  M --> N["Re-anchor before EVERY task"]
   N --> O[Implement]
-  O --> P[Test + verify acceptance]
-  P --> Q[flowctl done: summary + evidence]
+  O --> P["Test + verify acceptance"]
+  P --> Q["flowctl done: summary + evidence"]
   Q --> R{Impl review?}
-  R -- yes --> S[/flow-next:impl-review]
+  R -- yes --> S["/flow-next:impl-review"]
   S --> T{Next ready task?}
   R -- no --> T
   T -- yes --> N
