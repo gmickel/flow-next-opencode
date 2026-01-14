@@ -756,9 +756,9 @@ TXT
   [[ -n "${FLOW_RALPH_OPENCODE_MODEL:-}" ]] && opencode_args+=(--model "$FLOW_RALPH_OPENCODE_MODEL")
   [[ -n "${FLOW_RALPH_OPENCODE_VARIANT:-}" ]] && opencode_args+=(--variant "$FLOW_RALPH_OPENCODE_VARIANT")
 
-  opencode_env=()
+  prev_opencode_permission="${OPENCODE_PERMISSION-__unset__}"
   if [[ "$YOLO" == "1" ]]; then
-    opencode_env+=(OPENCODE_PERMISSION='{"*":"allow"}')
+    export OPENCODE_PERMISSION='{"*":"allow"}'
   fi
 
   ui_waiting
@@ -767,30 +767,36 @@ TXT
   if [[ "$WATCH_MODE" == "verbose" ]]; then
     echo ""
     if [[ -n "$TIMEOUT_CMD" ]]; then
-      "${opencode_env[@]}" $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py" --verbose
+      $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py" --verbose
     else
-      "${opencode_env[@]}" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py" --verbose
+      "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py" --verbose
     fi
     worker_rc=${PIPESTATUS[0]}
     worker_out="$(cat "$iter_log")"
   elif [[ "$WATCH_MODE" == "tools" ]]; then
     if [[ -n "$TIMEOUT_CMD" ]]; then
-      "${opencode_env[@]}" $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py"
+      $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py"
     else
-      "${opencode_env[@]}" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py"
+      "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py"
     fi
     worker_rc=${PIPESTATUS[0]}
     worker_out="$(cat "$iter_log")"
   else
     if [[ -n "$TIMEOUT_CMD" ]]; then
-      "${opencode_env[@]}" $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" > "$iter_log" 2>&1
+      $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" > "$iter_log" 2>&1
     else
-      "${opencode_env[@]}" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" > "$iter_log" 2>&1
+      "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" > "$iter_log" 2>&1
     fi
     worker_rc=$?
     worker_out="$(cat "$iter_log")"
   fi
   set -e
+
+  if [[ "$prev_opencode_permission" == "__unset__" ]]; then
+    unset OPENCODE_PERMISSION
+  else
+    export OPENCODE_PERMISSION="$prev_opencode_permission"
+  fi
 
   # Handle timeout (exit code 124 from timeout command)
   worker_timeout=0
