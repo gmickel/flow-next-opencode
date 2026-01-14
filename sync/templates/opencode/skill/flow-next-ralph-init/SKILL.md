@@ -49,7 +49,7 @@ fi
    - `PLAN_REVIEW=<chosen>` and `WORK_REVIEW=<chosen>`
    - replace `{{PLAN_REVIEW}}` and `{{WORK_REVIEW}}` placeholders in the template
 6. Copy templates and flowctl files.
-7. Print next steps (run from terminal, NOT inside Claude Code):
+7. Print next steps (run from terminal, NOT inside OpenCode):
    - Edit `scripts/ralph/config.env` to customize settings
    - `./scripts/ralph/ralph_once.sh` (one iteration, observe)
    - `./scripts/ralph/ralph.sh` (full loop, AFK)

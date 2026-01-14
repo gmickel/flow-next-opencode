@@ -36,7 +36,7 @@ fi
 install_project() {
   mkdir -p "$PROJECT/.opencode" "$PROJECT/plugins"
 
-  rsync -a "$ROOT/.opencode/command" "$ROOT/.opencode/skill" "$ROOT/.opencode/agent" "$PROJECT/.opencode/"
+  rsync -a "$ROOT/.opencode/command" "$ROOT/.opencode/skill" "$ROOT/.opencode/agent" "$ROOT/.opencode/plugin" "$PROJECT/.opencode/"
 
   if [[ ! -f "$PROJECT/.opencode/opencode.json" && -f "$ROOT/.opencode/opencode.json" ]]; then
     rsync -a "$ROOT/.opencode/opencode.json" "$PROJECT/.opencode/"

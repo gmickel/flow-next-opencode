@@ -261,7 +261,7 @@ ui_fail() {
 }
 
 ui_waiting() {
-  ui "   ${C_DIM}⏳ Claude working...${C_RESET}"
+  ui "   ${C_DIM}⏳ OpenCode working...${C_RESET}"
 }
 
 [[ -f "$CONFIG" ]] || fail "missing config.env"
@@ -273,7 +273,6 @@ source "$CONFIG"
 set +a
 
 MAX_ITERATIONS="${MAX_ITERATIONS:-25}"
-MAX_TURNS="${MAX_TURNS:-}"  # empty = no limit; Claude stops via promise tags
 MAX_ATTEMPTS_PER_TASK="${MAX_ATTEMPTS_PER_TASK:-5}"
 WORKER_TIMEOUT="${WORKER_TIMEOUT:-1800}"  # 30min default; prevents stuck workers
 BRANCH_MODE="${BRANCH_MODE:-new}"
@@ -318,7 +317,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Set up signal trap for clean Ctrl+C handling
-# Must kill all child processes including timeout and claude
+# Must kill all child processes including timeout and opencode
 cleanup() {
   trap - SIGINT SIGTERM  # Prevent re-entry
   # Kill all child processes
@@ -329,7 +328,8 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM
 
-CLAUDE_BIN="${CLAUDE_BIN:-claude}"
+OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
+OPENCODE_AGENT="${FLOW_RALPH_OPENCODE_AGENT:-ralph-runner}"
 
 # Detect timeout command (GNU coreutils). On macOS: brew install coreutils
 # Use --foreground to keep child in same process group for signal handling
@@ -458,8 +458,8 @@ print(matches[-1] if matches else "")
 PY
 }
 
-# Extract assistant text from stream-json log (for tag extraction in watch mode)
-extract_text_from_stream_json() {
+# Extract assistant text from OpenCode JSON log (for tag extraction in watch mode)
+extract_text_from_opencode_json() {
   local log_file="$1"
   python3 - "$log_file" <<'PY'
 import json, sys
@@ -475,12 +475,12 @@ try:
                 ev = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if ev.get("type") != "assistant":
+            if ev.get("type") != "text":
                 continue
-            msg = ev.get("message") or {}
-            for blk in (msg.get("content") or []):
-                if blk.get("type") == "text":
-                    out.append(blk.get("text", ""))
+            part = ev.get("part") or {}
+            text = part.get("text", "")
+            if text:
+                out.append(text)
 except Exception:
     pass
 print("\n".join(out))
@@ -499,7 +499,7 @@ append_progress() {
   {
     echo "## $(date -u +%Y-%m-%dT%H:%M:%SZ) - iter $iter"
     echo "status=$status epic=${epic_id:-} task=${task_id:-} reason=${reason:-}"
-    echo "claude_rc=$claude_rc"
+    echo "opencode_rc=$opencode_rc"
     echo "verdict=${verdict:-}"
     echo "promise=${promise:-}"
     echo "receipt=${REVIEW_RECEIPT_PATH:-} exists=$receipt_exists"
@@ -731,85 +731,57 @@ while (( iter <= MAX_ITERATIONS )); do
   fi
 
   export FLOW_RALPH="1"
-  claude_args=(-p)
-  # Always use stream-json for logs (TUI needs it), watch mode only controls terminal display
-  claude_args+=(--output-format stream-json)
-
-  # Autonomous mode system prompt - critical for preventing drift
-  claude_args+=(--append-system-prompt "AUTONOMOUS MODE ACTIVE (FLOW_RALPH=1). You are running unattended. CRITICAL RULES:
-1. EXECUTE COMMANDS EXACTLY as shown in prompts. Do not paraphrase or improvise.
-2. VERIFY OUTCOMES by running the verification commands (flowctl show, git status).
-3. NEVER CLAIM SUCCESS without proof. If flowctl done was not run, the task is NOT done.
-4. COPY TEMPLATES VERBATIM - receipt JSON must match exactly including all fields.
-5. USE SKILLS AS SPECIFIED - invoke /flow-next:impl-review, do not improvise review prompts.
-Violations break automation and leave the user with incomplete work. Be precise, not creative.")
-
-  [[ -n "${MAX_TURNS:-}" ]] && claude_args+=(--max-turns "$MAX_TURNS")
-  [[ "$YOLO" == "1" ]] && claude_args+=(--dangerously-skip-permissions)
-  [[ -n "${FLOW_RALPH_CLAUDE_PLUGIN_DIR:-}" ]] && claude_args+=(--plugin-dir "$FLOW_RALPH_CLAUDE_PLUGIN_DIR")
-  [[ -n "${FLOW_RALPH_CLAUDE_MODEL:-}" ]] && claude_args+=(--model "$FLOW_RALPH_CLAUDE_MODEL")
-  [[ -n "${FLOW_RALPH_CLAUDE_SESSION_ID:-}" ]] && claude_args+=(--session-id "$FLOW_RALPH_CLAUDE_SESSION_ID")
-  [[ -n "${FLOW_RALPH_CLAUDE_PERMISSION_MODE:-}" ]] && claude_args+=(--permission-mode "$FLOW_RALPH_CLAUDE_PERMISSION_MODE")
-  [[ "${FLOW_RALPH_CLAUDE_NO_SESSION_PERSISTENCE:-}" == "1" ]] && claude_args+=(--no-session-persistence)
-  if [[ -n "${FLOW_RALPH_CLAUDE_DEBUG:-}" ]]; then
-    if [[ "${FLOW_RALPH_CLAUDE_DEBUG}" == "1" ]]; then
-      claude_args+=(--debug)
-    else
-      claude_args+=(--debug "$FLOW_RALPH_CLAUDE_DEBUG")
-    fi
+  if [[ "$YOLO" == "1" && -z "${OPENCODE_PERMISSION:-}" ]]; then
+    export OPENCODE_PERMISSION='{"*":"allow"}'
   fi
-  [[ "${FLOW_RALPH_CLAUDE_VERBOSE:-}" == "1" ]] && claude_args+=(--verbose)
+
+  opencode_args=(run --format json --agent "$OPENCODE_AGENT")
+  [[ -n "${FLOW_RALPH_OPENCODE_MODEL:-}" ]] && opencode_args+=(--model "$FLOW_RALPH_OPENCODE_MODEL")
+  [[ -n "${FLOW_RALPH_OPENCODE_VARIANT:-}" ]] && opencode_args+=(--variant "$FLOW_RALPH_OPENCODE_VARIANT")
 
   ui_waiting
-  claude_out=""
+  opencode_out=""
   set +e
-  [[ -n "${FLOW_RALPH_CLAUDE_PLUGIN_DIR:-}" ]] && claude_args+=(--plugin-dir "$FLOW_RALPH_CLAUDE_PLUGIN_DIR")
   if [[ "$WATCH_MODE" == "verbose" ]]; then
-    # Full output: stream through filter with --verbose to show text/thinking
-    [[ ! " ${claude_args[*]} " =~ " --verbose " ]] && claude_args+=(--verbose)
     echo ""
     if [[ -n "$TIMEOUT_CMD" ]]; then
-      $TIMEOUT_CMD "$WORKER_TIMEOUT" "$CLAUDE_BIN" "${claude_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py" --verbose
+      printf '%s' "$prompt" | $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py" --verbose
+      opencode_rc=${PIPESTATUS[1]}
     else
-      "$CLAUDE_BIN" "${claude_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py" --verbose
+      printf '%s' "$prompt" | "$OPENCODE_BIN" "${opencode_args[@]}" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py" --verbose
+      opencode_rc=${PIPESTATUS[1]}
     fi
-    claude_rc=${PIPESTATUS[0]}
-    claude_out="$(cat "$iter_log")"
+    opencode_out="$(cat "$iter_log")"
   elif [[ "$WATCH_MODE" == "tools" ]]; then
-    # Filtered output: stream-json through watch-filter.py
-    # Add --verbose only if not already set (needed for tool visibility)
-    [[ ! " ${claude_args[*]} " =~ " --verbose " ]] && claude_args+=(--verbose)
     if [[ -n "$TIMEOUT_CMD" ]]; then
-      $TIMEOUT_CMD "$WORKER_TIMEOUT" "$CLAUDE_BIN" "${claude_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py"
+      printf '%s' "$prompt" | $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py"
+      opencode_rc=${PIPESTATUS[1]}
     else
-      "$CLAUDE_BIN" "${claude_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py"
+      printf '%s' "$prompt" | "$OPENCODE_BIN" "${opencode_args[@]}" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py"
+      opencode_rc=${PIPESTATUS[1]}
     fi
-    claude_rc=${PIPESTATUS[0]}
-    # Log contains stream-json; verdict/promise extraction handled by fallback logic
-    claude_out="$(cat "$iter_log")"
+    opencode_out="$(cat "$iter_log")"
   else
-    # Default: quiet mode (stream-json to log, no terminal display)
-    # --verbose required for stream-json with --print
-    [[ ! " ${claude_args[*]} " =~ " --verbose " ]] && claude_args+=(--verbose)
     if [[ -n "$TIMEOUT_CMD" ]]; then
-      $TIMEOUT_CMD "$WORKER_TIMEOUT" "$CLAUDE_BIN" "${claude_args[@]}" "$prompt" > "$iter_log" 2>&1
+      printf '%s' "$prompt" | $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" > "$iter_log" 2>&1
+      opencode_rc=${PIPESTATUS[1]}
     else
-      "$CLAUDE_BIN" "${claude_args[@]}" "$prompt" > "$iter_log" 2>&1
+      printf '%s' "$prompt" | "$OPENCODE_BIN" "${opencode_args[@]}" > "$iter_log" 2>&1
+      opencode_rc=${PIPESTATUS[1]}
     fi
-    claude_rc=$?
-    claude_out="$(cat "$iter_log")"
+    opencode_out="$(cat "$iter_log")"
   fi
   set -e
 
   # Handle timeout (exit code 124 from timeout command)
   worker_timeout=0
-  if [[ -n "$TIMEOUT_CMD" && "$claude_rc" -eq 124 ]]; then
+  if [[ -n "$TIMEOUT_CMD" && "$opencode_rc" -eq 124 ]]; then
     echo "ralph: worker timed out after ${WORKER_TIMEOUT}s" >> "$iter_log"
     log "worker timeout after ${WORKER_TIMEOUT}s"
     worker_timeout=1
   fi
 
-  log "claude rc=$claude_rc log=$iter_log"
+  log "opencode rc=$opencode_rc log=$iter_log"
 
   force_retry=$worker_timeout
   plan_review_status=""
@@ -833,10 +805,10 @@ Violations break automation and leave the user with incomplete work. Be precise,
   fi
 
   # Extract verdict/promise for progress log (not displayed in UI)
-  # Always parse stream-json since we always use that format now
-  claude_text="$(extract_text_from_stream_json "$iter_log")"
-  verdict="$(printf '%s' "$claude_text" | extract_tag verdict)"
-  promise="$(printf '%s' "$claude_text" | extract_tag promise)"
+  # Always parse OpenCode JSON since we always use that format now
+  opencode_text="$(extract_text_from_opencode_json "$iter_log")"
+  verdict="$(printf '%s' "$opencode_text" | extract_tag verdict)"
+  promise="$(printf '%s' "$opencode_text" | extract_tag promise)"
 
   # Fallback: derive verdict from flowctl status for logging
   if [[ -z "$verdict" && -n "$plan_review_status" ]]; then
@@ -861,20 +833,20 @@ Violations break automation and leave the user with incomplete work. Be precise,
   fi
   append_progress "$verdict" "$promise" "$plan_review_status" "$task_status"
 
-  if echo "$claude_text" | grep -q "<promise>COMPLETE</promise>"; then
+  if echo "$opencode_text" | grep -q "<promise>COMPLETE</promise>"; then
     ui_complete
     echo "<promise>COMPLETE</promise>"
     exit 0
   fi
 
   exit_code=0
-  if echo "$claude_text" | grep -q "<promise>FAIL</promise>"; then
+  if echo "$opencode_text" | grep -q "<promise>FAIL</promise>"; then
     exit_code=1
-  elif echo "$claude_text" | grep -q "<promise>RETRY</promise>"; then
+  elif echo "$opencode_text" | grep -q "<promise>RETRY</promise>"; then
     exit_code=2
   elif [[ "$force_retry" == "1" ]]; then
     exit_code=2
-  elif [[ "$claude_rc" -ne 0 && "$task_status" != "done" && "$verdict" != "SHIP" ]]; then
+  elif [[ "$opencode_rc" -ne 0 && "$task_status" != "done" && "$verdict" != "SHIP" ]]; then
     # Only fail on non-zero exit code if task didn't complete and verdict isn't SHIP
     # This prevents false failures from transient errors (telemetry, model fallback, etc.)
     exit_code=1
@@ -882,7 +854,7 @@ Violations break automation and leave the user with incomplete work. Be precise,
 
   if [[ "$exit_code" -eq 1 ]]; then
     log "exit=fail"
-    ui_fail "Claude returned FAIL promise"
+    ui_fail "OpenCode returned FAIL promise"
     exit 1
   fi
 
