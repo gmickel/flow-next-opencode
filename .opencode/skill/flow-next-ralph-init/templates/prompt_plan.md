@@ -5,6 +5,17 @@ Inputs:
 - PLAN_REVIEW={{PLAN_REVIEW}}
 - REQUIRE_PLAN_REVIEW={{REQUIRE_PLAN_REVIEW}}
 
+Treat the following as the user's exact input to `/flow-next:plan-review`:
+`{{EPIC_ID}} --review={{PLAN_REVIEW}}`
+
+**Ralph is unattended**: do NOT ask any setup questions. If the skill instructs you to ask,
+skip that step and proceed using the review mode above.
+
+**MUST DO**:
+- Use the **skill tool** to load `flow-next-plan-review` and follow it.
+- Do NOT spawn a generic task/subagent for the plan review step.
+- When the skill references `$ARGUMENTS`, treat it as the exact input string above.
+
 Steps:
 1) Re-anchor:
    - scripts/ralph/flowctl show {{EPIC_ID}} --json

@@ -274,7 +274,14 @@ Note: OpenCode still enforces permissions in headless runs. `YOLO=1` (the defaul
 | `FLOW_RALPH_OPENCODE_MODEL` | `openai/gpt-5.2` | Override model for Ralph runs |
 | `FLOW_RALPH_OPENCODE_VARIANT` | `high` | Provider-specific variant/effort |
 | `FLOW_RALPH_OPENCODE_AGENT` | `ralph-runner` | Subagent name to run |
+| `FLOW_RALPH_REVIEWER_AGENT` | `opencode-reviewer` | Reviewer subagent name |
 | `OPENCODE_BIN` | `/usr/local/bin/opencode` | Override OpenCode CLI path |
+
+**Default template (current):**
+```
+FLOW_RALPH_OPENCODE_MODEL=openai/gpt-5.2-codex
+FLOW_RALPH_OPENCODE_VARIANT=medium
+```
 
 ---
 

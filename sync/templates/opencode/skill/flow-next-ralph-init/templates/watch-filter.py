@@ -70,9 +70,18 @@ def truncate(s: str, max_len: int = 60) -> str:
     return s
 
 
-def format_tool_use(tool_name: str, tool_input: dict) -> str:
+def format_tool_use(tool_name: str, tool_input: dict, state: dict) -> str:
     tool = (tool_name or "").lower()
     icon = ICONS.get(tool, "🔹")
+
+    def pick_path(input_obj: dict) -> str:
+        if not input_obj:
+            return ""
+        for key in ("filePath", "file_path", "path", "target", "file"):
+            val = input_obj.get(key)
+            if isinstance(val, str) and val:
+                return val
+        return ""
 
     if tool == "bash":
         cmd = tool_input.get("command", "")
@@ -82,7 +91,9 @@ def format_tool_use(tool_name: str, tool_input: dict) -> str:
         return f"{icon} Bash: {truncate(cmd, 60)}"
 
     if tool in ("edit", "write", "read"):
-        path = tool_input.get("file_path", "")
+        path = pick_path(tool_input)
+        if not path:
+            path = state.get("title", "") if isinstance(state, dict) else ""
         return f"{icon} {tool.capitalize()}: {path.split('/')[-1] if path else 'unknown'}"
 
     if tool == "grep":
@@ -99,7 +110,7 @@ def format_tool_use(tool_name: str, tool_input: dict) -> str:
         return f"{icon} Task ({agent}): {truncate(desc, 50)}"
 
     if tool == "skill":
-        skill = tool_input.get("skill", "")
+        skill = tool_input.get("name", "") or tool_input.get("skill", "")
         return f"{icon} Skill: {skill}"
 
     if tool in ("todoread", "todowrite"):
@@ -120,7 +131,7 @@ def process_event(event: dict, verbose: bool) -> None:
         tool_name = part.get("tool", "")
         state = part.get("state", {}) or {}
         tool_input = state.get("input", {}) or {}
-        formatted = format_tool_use(tool_name, tool_input)
+        formatted = format_tool_use(tool_name, tool_input, state)
         safe_print(f"{INDENT}{C_DIM}{formatted}{C_RESET}")
         return
 

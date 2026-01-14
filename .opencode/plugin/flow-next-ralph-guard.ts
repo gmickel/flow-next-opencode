@@ -4,6 +4,8 @@ import path from "path"
 
 const STATE_DIR = "/tmp"
 
+const DEFAULT_REVIEWER = "opencode-reviewer"
+
 type CallInfo = {
   tool: string
   command?: string
@@ -70,6 +72,7 @@ function isReceiptWrite(command: string, receiptPath: string) {
 }
 
 export default async function (_input: PluginInput): Promise<Hooks> {
+  const allowedReviewer = process.env.FLOW_RALPH_REVIEWER_AGENT || DEFAULT_REVIEWER
   return {
     "tool.execute.before": async (input, output) => {
       if (!isRalph()) return output
@@ -145,6 +148,12 @@ export default async function (_input: PluginInput): Promise<Hooks> {
       if (input.tool === "task") {
         const subagent = String(output.args?.subagent_type ?? "")
         state.calls[callID] = { tool: "task", subagent_type: subagent }
+        if (subagent !== allowedReviewer) {
+          block(
+            `BLOCKED: Ralph mode only allows task tool for reviewer '${allowedReviewer}'. ` +
+              "Use the skill tool (flow-next-plan-review / flow-next-work) and do NOT spawn generic tasks.",
+          )
+        }
       }
 
       saveState(sessionID, state)
@@ -193,7 +202,7 @@ export default async function (_input: PluginInput): Promise<Hooks> {
         }
       }
 
-      if (input.tool === "task" && call?.subagent_type === "opencode-reviewer") {
+      if (input.tool === "task" && call?.subagent_type === allowedReviewer) {
         const verdict = outputText.match(/<verdict>(SHIP|NEEDS_WORK|MAJOR_RETHINK)<\/verdict>/)
         if (verdict) {
           state.opencode_review_succeeded = true
