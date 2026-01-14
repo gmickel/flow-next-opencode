@@ -1,0 +1,6 @@
+.flow/
+.DS_Store
+.opencode/node_modules/
+.opencode/bun.lock
+.opencode/package.json
+convo.txt

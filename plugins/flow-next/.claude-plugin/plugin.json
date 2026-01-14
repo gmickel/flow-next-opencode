@@ -1,0 +1,20 @@
+{
+  "name": "flow-next",
+  "version": "0.7.0",
+  "description": "Zero-dependency planning + execution with .flow/ task tracking and Ralph autonomous mode (multi-model review gates). Includes 6 subagents, 8 commands, 11 skills.",
+  "author": {
+    "name": "Gordon Mickel",
+    "email": "gordon@mickel.tech",
+    "url": "https://mickel.tech"
+  },
+  "homepage": "https://mickel.tech/apps/flow-next",
+  "repository": "https://github.com/gmickel/gmickel-claude-marketplace",
+  "license": "MIT",
+  "keywords": [
+    "workflow",
+    "planning",
+    "execution",
+    "automation",
+    "ai"
+  ]
+}

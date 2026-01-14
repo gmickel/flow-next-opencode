@@ -1,0 +1,25 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "batch_tool": true
+  },
+  "agent": {
+    "opencode-reviewer": {
+      "description": "Carmack-level reviewer for plans and implementations",
+      "model": "openai/gpt-5.2",
+      "reasoningEffort": "high",
+      "prompt": "You are a strict reviewer. Focus on correctness, completeness, feasibility, risks, and testability. Provide issues with severity and concrete fixes. End with exactly one verdict tag: <verdict>SHIP</verdict> or <verdict>NEEDS_WORK</verdict> or <verdict>MAJOR_RETHINK</verdict>.",
+      "tools": {
+        "write": false,
+        "edit": false,
+        "patch": false,
+        "multiedit": false
+      }
+    }
+  },
+  "permission": {
+    "*": "allow",
+    "todoread": "deny",
+    "todowrite": "deny"
+  }
+}
