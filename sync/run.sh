@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SOURCE="${FLOW_NEXT_SRC:-/Users/gordon/work/gmickel-claude-marketplace/plugins/flow-next}"
+SOURCE="${FLOW_NEXT_SRC:-$HOME/work/gmickel-claude-marketplace/plugins/flow-next}"
 
 if [[ ! -d "$SOURCE" ]]; then
   echo "missing SOURCE: $SOURCE" >&2

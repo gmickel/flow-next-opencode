@@ -13,7 +13,7 @@
 
 ---
 
-> **Experimental.** Active work-in-progress while we chase parity with upstream.
+> **Experimental.** Active work-in-progress while we chase parity with upstream. Ralph mode coming soon.
 
 ---
 
@@ -278,9 +278,9 @@ Change those if you want a different model or effort.
 [RepoPrompt](https://repoprompt.com/?atp=KJbuL4) provides the best review experience on macOS.
 
 **Why use RepoPrompt:**
-* Builder provides full file context with intelligent selection
-* Visual interface for reviewing diffs
-* Maintains conversation history across reviews
+* Best-in-class context builder for reviews (full file context, smart selection)
+* Optional: enables the planning **context-scout** for deeper discovery vs repo-scout
+* Visual diff review UI + persistent chat threads
 
 **Setup:**
 
@@ -345,7 +345,7 @@ Config lives in `.flow/config.json` , separate from Ralph’s `scripts/ralph/con
 
 ## Ralph (Autonomous Mode)
 
-Ralph scaffolding is present ( `/flow-next:ralph-init` ), but OpenCode-native automation is **not yet fully ported**. Expect changes here as parity work continues. Upstream docs exist but include Claude-specific details.
+Ralph scaffolding is present ( `/flow-next:ralph-init` ), but OpenCode-native automation is **not yet fully ported**. Expect changes here as parity work continues. Upstream docs are included at `plugins/flow-next/docs/ralph.md` and are Claude-specific.
 
 ---
 
@@ -413,7 +413,7 @@ Legacy `fn-N` format is still supported for backwards compatibility.
 
 ## flowctl CLI
 
-Bundled Python script for managing `.flow/` .
+Bundled Python script for managing `.flow/`. Flow-Next’s commands handle epic/task creation automatically—use `flowctl` for direct inspection, fixes, or advanced workflows.
 
 ```bash
 flowctl init
@@ -469,20 +469,7 @@ flowctl init
 
 * Python 3.8+
 * git
-* Optional for reviews: [RepoPrompt](https://repoprompt.com/?atp=KJbuL4) (macOS)
-
----
-
-## Flow vs Flow-Next
-
-| | Flow | Flow-Next |
-|:--|:--|:--|
-| **Task tracking** | External tracker or standalone plan files | `.flow/` directory (bundled flowctl) |
-| **Install** | Plugin + optional external tracker | Plugin only |
-| **Artifacts** | Standalone plan files | `.flow/specs/` and `.flow/tasks/` |
-| **Config edits** | External config edits | None |
-| **Multi-user** | Via external tracker | Built-in (scan-based IDs, soft claims) |
-| **Uninstall** | Remove plugin + external tracker config | Delete `.flow/` (and `scripts/ralph/` if enabled) |
+* Optional: [RepoPrompt](https://repoprompt.com/?atp=KJbuL4) for macOS GUI reviews + its context builder (also powers the planning context-scout). OpenCode reviews work without it.
 
 ---
 
