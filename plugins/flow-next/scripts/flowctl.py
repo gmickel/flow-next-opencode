@@ -520,6 +520,24 @@ def extract_symbols_from_file(file_path: Path) -> list[str]:
             ):
                 symbols.append(match.group(1))
 
+        # C#: class/interface/struct/enum/record and methods
+        elif ext == ".cs":
+            for match in re.finditer(
+                r"^\s*(?:public|private|protected|internal)?\s*"
+                r"(?:partial\s+)?(?:class|interface|struct|enum|record)\s+(\w+)",
+                content,
+                re.MULTILINE,
+            ):
+                symbols.append(match.group(1))
+            for match in re.finditer(
+                r"^\s*(?:public|private|protected|internal)?\s*"
+                r"(?:static\s+)?(?:async\s+)?(?:partial\s+)?"
+                r"[\w<>\[\],\s]+\s+(\w+)\s*\(",
+                content,
+                re.MULTILINE,
+            ):
+                symbols.append(match.group(1))
+
         return list(set(symbols))
     except Exception:
         # Never crash on parse errors - just return empty
@@ -561,6 +579,8 @@ def find_references(
                 "*.cxx",
                 # Java
                 "*.java",
+                # C#
+                "*.cs",
             ],
             capture_output=True,
             text=True,
