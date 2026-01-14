@@ -114,7 +114,13 @@ export default async function (_input: PluginInput): Promise<Hooks> {
         }
 
         if (command.includes("rp-cli")) {
-          block("BLOCKED: Do not call rp-cli directly. Use flowctl rp wrappers.")
+          const isRpCheck =
+            /\bwhich\s+rp-cli\b/.test(command) ||
+            /\bcommand\s+-v\s+rp-cli\b/.test(command) ||
+            /-x\s+\/(opt\/homebrew|usr\/local)\/bin\/rp-cli\b/.test(command)
+          if (!isRpCheck) {
+            block("BLOCKED: Do not call rp-cli directly. Use flowctl rp wrappers.")
+          }
         }
 
         if (command.includes("setup-review")) {
