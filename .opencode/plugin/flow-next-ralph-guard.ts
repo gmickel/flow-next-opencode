@@ -61,6 +61,24 @@ function block(message: string): never {
   throw new Error(message)
 }
 
+function blockIfChatCommand(command: string) {
+  if (/(^|\s)\/?flow-next:/.test(command)) {
+    block("BLOCKED: Do not run /flow-next:* as a shell command. Use the skill/tool workflow instead.")
+  }
+}
+
+function blockIfQuestionText(text: string) {
+  const normalized = text.toLowerCase()
+  if (
+    normalized.includes("want me to proceed") ||
+    normalized.includes("should i proceed") ||
+    normalized.includes("should i continue") ||
+    normalized.includes("do you want me to proceed")
+  ) {
+    block("BLOCKED: Ralph is unattended. Do not ask for confirmation.")
+  }
+}
+
 function isReceiptWrite(command: string, receiptPath: string) {
   const dir = path.dirname(receiptPath)
   return (
@@ -83,6 +101,7 @@ export default async function (_input: PluginInput): Promise<Hooks> {
 
       if (input.tool === "bash") {
         const command = String(output.args?.command ?? "")
+        blockIfChatCommand(command)
         state.calls[callID] = { tool: "bash", command }
 
         if (command.includes("chat-send")) {
@@ -168,6 +187,7 @@ export default async function (_input: PluginInput): Promise<Hooks> {
       const callID = input.callID
       const call = state.calls[callID]
       const outputText = String(output.output ?? "")
+      blockIfQuestionText(outputText)
 
       if (input.tool === "bash" && call?.command) {
         const command = call.command

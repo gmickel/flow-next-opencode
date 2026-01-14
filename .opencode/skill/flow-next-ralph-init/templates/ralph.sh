@@ -273,6 +273,7 @@ source "$CONFIG"
 set +a
 
 MAX_ITERATIONS="${MAX_ITERATIONS:-25}"
+MAX_TURNS="${MAX_TURNS:-}"  # empty = no limit; unused for OpenCode (kept for parity)
 MAX_ATTEMPTS_PER_TASK="${MAX_ATTEMPTS_PER_TASK:-5}"
 WORKER_TIMEOUT="${WORKER_TIMEOUT:-1800}"  # 30min default; prevents stuck workers
 BRANCH_MODE="${BRANCH_MODE:-new}"
@@ -317,7 +318,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Set up signal trap for clean Ctrl+C handling
-# Must kill all child processes including timeout and opencode
+# Must kill all child processes including timeout and worker
 cleanup() {
   trap - SIGINT SIGTERM  # Prevent re-entry
   # Kill all child processes
@@ -329,7 +330,6 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
-OPENCODE_AGENT="${FLOW_RALPH_OPENCODE_AGENT:-ralph-runner}"
 
 # Detect timeout command (GNU coreutils). On macOS: brew install coreutils
 # Use --foreground to keep child in same process group for signal handling
@@ -356,10 +356,10 @@ sanitize_id() {
 
 get_actor() {
   if [[ -n "${FLOW_ACTOR:-}" ]]; then echo "$FLOW_ACTOR"; return; fi
-  if actor="$(git -C "$ROOT_DIR" config user.email 2>/dev/null)"; then
+  if actor="$(git -C "$ROOT_DIR" config user.name 2>/dev/null)"; then
     [[ -n "$actor" ]] && { echo "$actor"; return; }
   fi
-  if actor="$(git -C "$ROOT_DIR" config user.name 2>/dev/null)"; then
+  if actor="$(git -C "$ROOT_DIR" config user.email 2>/dev/null)"; then
     [[ -n "$actor" ]] && { echo "$actor"; return; }
   fi
   echo "${USER:-unknown}"
@@ -458,8 +458,8 @@ print(matches[-1] if matches else "")
 PY
 }
 
-# Extract assistant text from OpenCode JSON log (for tag extraction in watch mode)
-extract_text_from_opencode_json() {
+# Extract assistant text from stream-json log (for tag extraction in watch mode)
+extract_text_from_run_json() {
   local log_file="$1"
   python3 - "$log_file" <<'PY'
 import json, sys
@@ -475,12 +475,21 @@ try:
                 ev = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if ev.get("type") != "text":
+
+            # OpenCode run --format json
+            if ev.get("type") == "text":
+                part = ev.get("part") or {}
+                text = part.get("text", "")
+                if text:
+                    out.append(text)
                 continue
-            part = ev.get("part") or {}
-            text = part.get("text", "")
-            if text:
-                out.append(text)
+
+            # Claude stream-json (fallback)
+            if ev.get("type") == "assistant":
+                msg = ev.get("message") or {}
+                for blk in (msg.get("content") or []):
+                    if blk.get("type") == "text":
+                        out.append(blk.get("text", ""))
 except Exception:
     pass
 print("\n".join(out))
@@ -499,7 +508,7 @@ append_progress() {
   {
     echo "## $(date -u +%Y-%m-%dT%H:%M:%SZ) - iter $iter"
     echo "status=$status epic=${epic_id:-} task=${task_id:-} reason=${reason:-}"
-    echo "opencode_rc=$opencode_rc"
+    echo "worker_rc=$worker_rc"
     echo "verdict=${verdict:-}"
     echo "promise=${promise:-}"
     echo "receipt=${REVIEW_RECEIPT_PATH:-} exists=$receipt_exists"
@@ -731,57 +740,67 @@ while (( iter <= MAX_ITERATIONS )); do
   fi
 
   export FLOW_RALPH="1"
-  if [[ "$YOLO" == "1" && -z "${OPENCODE_PERMISSION:-}" ]]; then
-    export OPENCODE_PERMISSION='{"*":"allow"}'
-  fi
+  AUTONOMOUS_RULES="$(cat <<'TXT'
+AUTONOMOUS MODE ACTIVE (FLOW_RALPH=1). You are running unattended. CRITICAL RULES:
+1. EXECUTE COMMANDS EXACTLY as shown in prompts. Do not paraphrase or improvise.
+2. VERIFY OUTCOMES by running the verification commands (flowctl show, git status).
+3. NEVER CLAIM SUCCESS without proof. If flowctl done was not run, the task is NOT done.
+4. COPY TEMPLATES VERBATIM - receipt JSON must match exactly including all fields.
+5. USE SKILLS AS SPECIFIED - invoke /flow-next:impl-review, do not improvise review prompts.
+Violations break automation and leave the user with incomplete work. Be precise, not creative.
+TXT
+)"
+  prompt="${AUTONOMOUS_RULES}"$'\n\n'"${prompt}"
 
-  opencode_args=(run --format json --agent "$OPENCODE_AGENT")
+  opencode_args=(run --format json --agent "${FLOW_RALPH_OPENCODE_AGENT:-ralph-runner}")
   [[ -n "${FLOW_RALPH_OPENCODE_MODEL:-}" ]] && opencode_args+=(--model "$FLOW_RALPH_OPENCODE_MODEL")
   [[ -n "${FLOW_RALPH_OPENCODE_VARIANT:-}" ]] && opencode_args+=(--variant "$FLOW_RALPH_OPENCODE_VARIANT")
 
+  opencode_env=()
+  if [[ "$YOLO" == "1" ]]; then
+    opencode_env+=(OPENCODE_PERMISSION='{"*":"allow"}')
+  fi
+
   ui_waiting
-  opencode_out=""
+  worker_out=""
   set +e
   if [[ "$WATCH_MODE" == "verbose" ]]; then
     echo ""
     if [[ -n "$TIMEOUT_CMD" ]]; then
-      printf '%s' "$prompt" | $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py" --verbose
-      opencode_rc=${PIPESTATUS[1]}
+      "${opencode_env[@]}" $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py" --verbose
     else
-      printf '%s' "$prompt" | "$OPENCODE_BIN" "${opencode_args[@]}" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py" --verbose
-      opencode_rc=${PIPESTATUS[1]}
+      "${opencode_env[@]}" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py" --verbose
     fi
-    opencode_out="$(cat "$iter_log")"
+    worker_rc=${PIPESTATUS[0]}
+    worker_out="$(cat "$iter_log")"
   elif [[ "$WATCH_MODE" == "tools" ]]; then
     if [[ -n "$TIMEOUT_CMD" ]]; then
-      printf '%s' "$prompt" | $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py"
-      opencode_rc=${PIPESTATUS[1]}
+      "${opencode_env[@]}" $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py"
     else
-      printf '%s' "$prompt" | "$OPENCODE_BIN" "${opencode_args[@]}" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py"
-      opencode_rc=${PIPESTATUS[1]}
+      "${opencode_env[@]}" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py"
     fi
-    opencode_out="$(cat "$iter_log")"
+    worker_rc=${PIPESTATUS[0]}
+    worker_out="$(cat "$iter_log")"
   else
     if [[ -n "$TIMEOUT_CMD" ]]; then
-      printf '%s' "$prompt" | $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" > "$iter_log" 2>&1
-      opencode_rc=${PIPESTATUS[1]}
+      "${opencode_env[@]}" $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" > "$iter_log" 2>&1
     else
-      printf '%s' "$prompt" | "$OPENCODE_BIN" "${opencode_args[@]}" > "$iter_log" 2>&1
-      opencode_rc=${PIPESTATUS[1]}
+      "${opencode_env[@]}" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" > "$iter_log" 2>&1
     fi
-    opencode_out="$(cat "$iter_log")"
+    worker_rc=$?
+    worker_out="$(cat "$iter_log")"
   fi
   set -e
 
   # Handle timeout (exit code 124 from timeout command)
   worker_timeout=0
-  if [[ -n "$TIMEOUT_CMD" && "$opencode_rc" -eq 124 ]]; then
+  if [[ -n "$TIMEOUT_CMD" && "$worker_rc" -eq 124 ]]; then
     echo "ralph: worker timed out after ${WORKER_TIMEOUT}s" >> "$iter_log"
     log "worker timeout after ${WORKER_TIMEOUT}s"
     worker_timeout=1
   fi
 
-  log "opencode rc=$opencode_rc log=$iter_log"
+  log "worker rc=$worker_rc log=$iter_log"
 
   force_retry=$worker_timeout
   plan_review_status=""
@@ -805,10 +824,10 @@ while (( iter <= MAX_ITERATIONS )); do
   fi
 
   # Extract verdict/promise for progress log (not displayed in UI)
-  # Always parse OpenCode JSON since we always use that format now
-  opencode_text="$(extract_text_from_opencode_json "$iter_log")"
-  verdict="$(printf '%s' "$opencode_text" | extract_tag verdict)"
-  promise="$(printf '%s' "$opencode_text" | extract_tag promise)"
+  # Always parse stream-json since we always use that format now
+  worker_text="$(extract_text_from_run_json "$iter_log")"
+  verdict="$(printf '%s' "$worker_text" | extract_tag verdict)"
+  promise="$(printf '%s' "$worker_text" | extract_tag promise)"
 
   # Fallback: derive verdict from flowctl status for logging
   if [[ -z "$verdict" && -n "$plan_review_status" ]]; then
@@ -833,20 +852,20 @@ while (( iter <= MAX_ITERATIONS )); do
   fi
   append_progress "$verdict" "$promise" "$plan_review_status" "$task_status"
 
-  if echo "$opencode_text" | grep -q "<promise>COMPLETE</promise>"; then
+  if echo "$worker_text" | grep -q "<promise>COMPLETE</promise>"; then
     ui_complete
     echo "<promise>COMPLETE</promise>"
     exit 0
   fi
 
   exit_code=0
-  if echo "$opencode_text" | grep -q "<promise>FAIL</promise>"; then
+  if echo "$worker_text" | grep -q "<promise>FAIL</promise>"; then
     exit_code=1
-  elif echo "$opencode_text" | grep -q "<promise>RETRY</promise>"; then
+  elif echo "$worker_text" | grep -q "<promise>RETRY</promise>"; then
     exit_code=2
   elif [[ "$force_retry" == "1" ]]; then
     exit_code=2
-  elif [[ "$opencode_rc" -ne 0 && "$task_status" != "done" && "$verdict" != "SHIP" ]]; then
+  elif [[ "$worker_rc" -ne 0 && "$task_status" != "done" && "$verdict" != "SHIP" ]]; then
     # Only fail on non-zero exit code if task didn't complete and verdict isn't SHIP
     # This prevents false failures from transient errors (telemetry, model fallback, etc.)
     exit_code=1

@@ -279,7 +279,7 @@ Note: OpenCode still enforces permissions in headless runs. `YOLO=1` (the defaul
 
 **Default template (current):**
 ```
-FLOW_RALPH_OPENCODE_MODEL=openai/gpt-5.2-codex
+FLOW_RALPH_OPENCODE_MODEL=openai/gpt-5.2
 FLOW_RALPH_OPENCODE_VARIANT=medium
 ```
 

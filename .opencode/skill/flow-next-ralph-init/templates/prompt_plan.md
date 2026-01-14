@@ -5,16 +5,8 @@ Inputs:
 - PLAN_REVIEW={{PLAN_REVIEW}}
 - REQUIRE_PLAN_REVIEW={{REQUIRE_PLAN_REVIEW}}
 
-Treat the following as the user's exact input to `/flow-next:plan-review`:
+Treat the following as the user's exact input to flow-next-plan-review:
 `{{EPIC_ID}} --review={{PLAN_REVIEW}}`
-
-**Ralph is unattended**: do NOT ask any setup questions. If the skill instructs you to ask,
-skip that step and proceed using the review mode above.
-
-**MUST DO**:
-- Use the **skill tool** to load `flow-next-plan-review` and follow it.
-- Do NOT spawn a generic task/subagent for the plan review step.
-- When the skill references `$ARGUMENTS`, treat it as the exact input string above.
 
 Steps:
 1) Re-anchor:
@@ -25,14 +17,18 @@ Steps:
 
 Ralph mode rules (must follow):
 - If PLAN_REVIEW=rp: use `flowctl rp` wrappers (setup-review, select-add, prompt-get, chat-send).
-- If PLAN_REVIEW=opencode: use `/flow-next:plan-review` with `--review=opencode`.
-- Write receipt via bash heredoc (no Write tool) if `REVIEW_RECEIPT_PATH` set.
+- If PLAN_REVIEW=opencode: use the task tool with subagent_type `opencode-reviewer`.
+- Write receipt via bash heredoc (no Write tool) if REVIEW_RECEIPT_PATH is set.
+- Do NOT run /flow-next:* as shell commands.
 - If any rule is violated, output `<promise>RETRY</promise>` and stop.
 
 2) Plan review gate:
-   - If PLAN_REVIEW=rp: run `/flow-next:plan-review {{EPIC_ID}} --review=rp`
-   - If PLAN_REVIEW=opencode: run `/flow-next:plan-review {{EPIC_ID}} --review=opencode`
-   - If PLAN_REVIEW=export: run `/flow-next:plan-review {{EPIC_ID}} --review=export`
+   - Call the skill tool: flow-next-plan-review.
+   - Follow the workflow in the skill using the exact arguments above.
+   - Do NOT stop after loading the skill.
+   - For opencode: run reviewer via task tool and require `<verdict>` tag.
+   - For rp: use flowctl rp wrappers (no --json, no --new-chat on re-review).
+   - For export: follow export flow in skill.
    - If PLAN_REVIEW=none:
      - If REQUIRE_PLAN_REVIEW=1: output `<promise>RETRY</promise>` and stop.
      - Else: set ship and stop:
@@ -44,15 +40,15 @@ Ralph mode rules (must follow):
    - Repeats until SHIP
    - Only returns to Ralph after SHIP or MAJOR_RETHINK
 
-4) IMMEDIATELY after SHIP verdict, write receipt (for rp/opencode mode):
+4) IMMEDIATELY after SHIP verdict, write receipt (for any review mode != none):
    ```bash
    mkdir -p "$(dirname '{{REVIEW_RECEIPT_PATH}}')"
    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-cat > '{{REVIEW_RECEIPT_PATH}}' <<EOF
-{"type":"plan_review","id":"{{EPIC_ID}}","mode":"{{PLAN_REVIEW}}","timestamp":"$ts"}
-EOF
+   cat > '{{REVIEW_RECEIPT_PATH}}' <<EOF
+   {"type":"plan_review","id":"{{EPIC_ID}}","mode":"{{PLAN_REVIEW}}","timestamp":"$ts"}
+   EOF
    ```
-   **CRITICAL: Copy EXACTLY. The `"id":"{{EPIC_ID}}"` field is REQUIRED.**
+   **CRITICAL: Copy EXACTLY. The "id":"{{EPIC_ID}}" field is REQUIRED.**
    Missing id = verification fails = forced retry.
 
 5) After SHIP:

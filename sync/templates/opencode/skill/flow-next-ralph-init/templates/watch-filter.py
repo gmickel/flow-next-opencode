@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Watch filter for Ralph - parses OpenCode JSON output and shows key events.
+Watch filter for Ralph - parses OpenCode run --format json (and Claude stream-json fallback).
 
 Reads JSON lines from stdin, outputs formatted tool calls in TUI style.
 
 CRITICAL: This filter is "fail open" - if output breaks, it continues draining
-stdin to prevent SIGPIPE cascading to upstream processes (tee, opencode).
+stdin to prevent SIGPIPE cascading to upstream processes (tee, worker).
 
 Usage:
     watch-filter.py           # Show tool calls only
@@ -18,8 +18,10 @@ import os
 import sys
 from typing import Optional
 
+# Global flag to disable output on pipe errors (fail open pattern)
 _output_disabled = False
 
+# ANSI color codes (match ralph.sh TUI)
 if sys.stdout.isatty() and not os.environ.get("NO_COLOR"):
     C_RESET = "\033[0m"
     C_DIM = "\033[2m"
@@ -27,25 +29,29 @@ if sys.stdout.isatty() and not os.environ.get("NO_COLOR"):
 else:
     C_RESET = C_DIM = C_CYAN = ""
 
+# TUI indentation (3 spaces to match ralph.sh)
 INDENT = "   "
 
+# Tool icons
 ICONS = {
-    "bash": "🔧",
-    "edit": "📝",
-    "write": "📄",
-    "read": "📖",
-    "grep": "🔍",
-    "glob": "📁",
-    "task": "🤖",
-    "webfetch": "🌐",
-    "websearch": "🔎",
-    "todoread": "📋",
-    "todowrite": "📋",
-    "skill": "⚡",
+    "Bash": "🔧",
+    "Edit": "📝",
+    "Write": "📄",
+    "Read": "📖",
+    "Grep": "🔍",
+    "Glob": "📁",
+    "Task": "🤖",
+    "WebFetch": "🌐",
+    "WebSearch": "🔎",
+    "TodoWrite": "📋",
+    "AskUserQuestion": "❓",
+    "Question": "❓",
+    "Skill": "⚡",
 }
 
 
 def safe_print(msg: str) -> None:
+    """Print that fails open - disables output on BrokenPipe instead of crashing."""
     global _output_disabled
     if _output_disabled:
         return
@@ -56,6 +62,7 @@ def safe_print(msg: str) -> None:
 
 
 def drain_stdin() -> None:
+    """Consume remaining stdin to prevent SIGPIPE to upstream processes."""
     try:
         for _ in sys.stdin:
             pass
@@ -70,91 +77,181 @@ def truncate(s: str, max_len: int = 60) -> str:
     return s
 
 
-def format_tool_use(tool_name: str, tool_input: dict, state: dict) -> str:
-    tool = (tool_name or "").lower()
-    icon = ICONS.get(tool, "🔹")
+def normalize_path(path: str) -> str:
+    return path.split("/")[-1] if path else "unknown"
 
-    def pick_path(input_obj: dict) -> str:
-        if not input_obj:
-            return ""
-        for key in ("filePath", "file_path", "path", "target", "file"):
-            val = input_obj.get(key)
-            if isinstance(val, str) and val:
-                return val
-        return ""
 
-    if tool == "bash":
+def format_tool_use(tool_name: str, tool_input: dict) -> str:
+    """Format a tool use event for TUI display."""
+    icon = ICONS.get(tool_name, "🔹")
+
+    if tool_name == "Bash":
         cmd = tool_input.get("command", "")
         desc = tool_input.get("description", "")
         if desc:
             return f"{icon} Bash: {truncate(desc)}"
         return f"{icon} Bash: {truncate(cmd, 60)}"
 
-    if tool in ("edit", "write", "read"):
-        path = pick_path(tool_input)
-        if not path:
-            path = state.get("title", "") if isinstance(state, dict) else ""
-        return f"{icon} {tool.capitalize()}: {path.split('/')[-1] if path else 'unknown'}"
+    elif tool_name == "Edit":
+        path = tool_input.get("file_path") or tool_input.get("filePath", "")
+        return f"{icon} Edit: {normalize_path(path)}"
 
-    if tool == "grep":
+    elif tool_name == "Write":
+        path = tool_input.get("file_path") or tool_input.get("filePath", "")
+        return f"{icon} Write: {normalize_path(path)}"
+
+    elif tool_name == "Read":
+        path = tool_input.get("file_path") or tool_input.get("filePath", "")
+        return f"{icon} Read: {normalize_path(path)}"
+
+    elif tool_name == "Grep":
         pattern = tool_input.get("pattern", "")
         return f"{icon} Grep: {truncate(pattern, 40)}"
 
-    if tool == "glob":
+    elif tool_name == "Glob":
         pattern = tool_input.get("pattern", "")
         return f"{icon} Glob: {pattern}"
 
-    if tool == "task":
+    elif tool_name == "Task":
         desc = tool_input.get("description", "")
         agent = tool_input.get("subagent_type", "")
         return f"{icon} Task ({agent}): {truncate(desc, 50)}"
 
-    if tool == "skill":
-        skill = tool_input.get("name", "") or tool_input.get("skill", "")
+    elif tool_name == "Skill":
+        skill = tool_input.get("skill", "")
         return f"{icon} Skill: {skill}"
 
-    if tool in ("todoread", "todowrite"):
-        todos = tool_input.get("todos", []) or []
+    elif tool_name == "TodoWrite":
+        todos = tool_input.get("todos", [])
         in_progress = [t for t in todos if t.get("status") == "in_progress"]
         if in_progress:
             return f"{icon} Todo: {truncate(in_progress[0].get('content', ''))}"
         return f"{icon} Todo: {len(todos)} items"
 
-    return f"{icon} {tool_name}"
+    else:
+        return f"{icon} {tool_name}"
+
+
+def format_tool_use_opencode(part: dict) -> str:
+    tool = part.get("tool", "")
+    state = part.get("state") or {}
+    tool_input = state.get("input") or {}
+    title = state.get("title") or ""
+
+    # Map OpenCode tool names to Claude-style names for icon mapping
+    tool_name = {
+        "bash": "Bash",
+        "edit": "Edit",
+        "write": "Write",
+        "read": "Read",
+        "grep": "Grep",
+        "glob": "Glob",
+        "list": "List",
+        "webfetch": "WebFetch",
+        "websearch": "WebSearch",
+        "todowrite": "TodoWrite",
+        "question": "Question",
+        "task": "Task",
+        "skill": "Skill",
+        "patch": "Patch",
+    }.get(tool, tool)
+
+    # Prefer explicit title if provided
+    if title:
+        return f"{ICONS.get(tool_name, '🔹')} {tool_name}: {truncate(title, 60)}"
+
+    return format_tool_use(tool_name, tool_input)
+
+
+def format_tool_result(block: dict) -> Optional[str]:
+    """Format a tool_result block (errors only).
+
+    Args:
+        block: The full tool_result block (not just content)
+    """
+    # Check is_error on the block itself
+    if block.get("is_error"):
+        content = block.get("content", "")
+        error_text = str(content) if content else "unknown error"
+        return f"{INDENT}{C_DIM}❌ {truncate(error_text, 60)}{C_RESET}"
+
+    # Also check content for error strings (heuristic)
+    content = block.get("content", "")
+    if isinstance(content, str):
+        lower = content.lower()
+        if "error" in lower or "failed" in lower:
+            return f"{INDENT}{C_DIM}⚠️  {truncate(content, 60)}{C_RESET}"
+
+    return None
 
 
 def process_event(event: dict, verbose: bool) -> None:
-    etype = event.get("type", "")
+    """Process a single stream-json event."""
+    event_type = event.get("type", "")
 
-    if etype == "tool_use":
-        part = event.get("part", {})
-        tool_name = part.get("tool", "")
-        state = part.get("state", {}) or {}
-        tool_input = state.get("input", {}) or {}
-        formatted = format_tool_use(tool_name, tool_input, state)
+    # OpenCode run --format json
+    if event_type == "tool_use":
+        part = event.get("part") or {}
+        formatted = format_tool_use_opencode(part)
         safe_print(f"{INDENT}{C_DIM}{formatted}{C_RESET}")
         return
 
-    if etype == "text" and verbose:
-        part = event.get("part", {})
+    if verbose and event_type == "text":
+        part = event.get("part") or {}
         text = part.get("text", "")
         if text.strip():
             safe_print(f"{INDENT}{C_CYAN}💬 {text}{C_RESET}")
         return
 
-    if etype == "error":
-        err = event.get("error", {})
-        msg = err.get("message") or err.get("name") or str(err)
+    if event_type == "error":
+        error = event.get("error", {})
+        msg = error.get("message") if isinstance(error, dict) else str(error)
         if msg:
             safe_print(f"{INDENT}{C_DIM}❌ {truncate(msg, 80)}{C_RESET}")
+        return
+
+    # Tool use events (assistant messages)
+    if event_type == "assistant":
+        message = event.get("message", {})
+        content = message.get("content", [])
+
+        for block in content:
+            block_type = block.get("type", "")
+
+            if block_type == "tool_use":
+                tool_name = block.get("name", "")
+                tool_input = block.get("input", {})
+                formatted = format_tool_use(tool_name, tool_input)
+                safe_print(f"{INDENT}{C_DIM}{formatted}{C_RESET}")
+
+            elif verbose and block_type == "text":
+                text = block.get("text", "")
+                if text.strip():
+                    safe_print(f"{INDENT}{C_CYAN}💬 {text}{C_RESET}")
+
+            elif verbose and block_type == "thinking":
+                thinking = block.get("thinking", "")
+                if thinking.strip():
+                    safe_print(f"{INDENT}{C_DIM}🧠 {truncate(thinking, 100)}{C_RESET}")
+
+    # Tool results (user messages with tool_result blocks)
+    elif event_type == "user":
+        message = event.get("message", {})
+        content = message.get("content", [])
+
+        for block in content:
+            if block.get("type") == "tool_result":
+                formatted = format_tool_result(block)
+                if formatted:
+                    safe_print(formatted)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Filter OpenCode JSON output")
+    parser = argparse.ArgumentParser(description="Filter Claude stream-json output")
     parser.add_argument(
         "--verbose",
         action="store_true",
-        help="Show text in addition to tool calls",
+        help="Show text and thinking in addition to tool calls",
     )
     args = parser.parse_args()
 
@@ -162,19 +259,29 @@ def main() -> None:
         line = line.strip()
         if not line:
             continue
+
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
+
         try:
             process_event(event, args.verbose)
         except Exception:
-            # Fail open: stop output but drain stdin
-            global _output_disabled
-            _output_disabled = True
-            drain_stdin()
-            return
+            # Swallow processing errors - keep draining stdin
+            pass
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(0)
+    except BrokenPipeError:
+        # Output broken but keep draining to prevent upstream SIGPIPE
+        drain_stdin()
+        sys.exit(0)
+    except Exception as e:
+        print(f"watch-filter: {e}", file=sys.stderr)
+        drain_stdin()
+        sys.exit(0)
