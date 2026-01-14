@@ -5,6 +5,13 @@ import path from "path"
 const STATE_DIR = "/tmp"
 
 const DEFAULT_REVIEWER = "opencode-reviewer"
+const RALPH_SYSTEM = [
+  "Ralph mode: unattended autonomous execution.",
+  "Never stop after a status-only message.",
+  "Always use tools to perform actions.",
+  "Do not ask questions.",
+  "If you cannot proceed, output exactly: <promise>RETRY</promise> and stop.",
+].join(" ")
 
 type CallInfo = {
   tool: string
@@ -92,6 +99,10 @@ function isReceiptWrite(command: string, receiptPath: string) {
 export default async function (_input: PluginInput): Promise<Hooks> {
   const allowedReviewer = process.env.FLOW_RALPH_REVIEWER_AGENT || DEFAULT_REVIEWER
   return {
+    "experimental.chat.system.transform": async (_input, output) => {
+      if (!isRalph()) return
+      output.system.push(RALPH_SYSTEM)
+    },
     "tool.execute.before": async (input, output) => {
       if (!isRalph()) return output
 
