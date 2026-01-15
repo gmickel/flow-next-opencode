@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- Add browser skill (standalone)
+
 ## 0.2.0
 
 - Ralph (autonomous loop) + opencode runner/reviewer config
