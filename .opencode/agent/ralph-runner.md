@@ -1,6 +1,6 @@
----
 description: Ralph autonomous runner. Use only for unattended Ralph iterations.
 mode: primary
+---
 ---
 AUTONOMOUS MODE ACTIVE (FLOW_RALPH=1). You are running unattended. CRITICAL RULES:
 

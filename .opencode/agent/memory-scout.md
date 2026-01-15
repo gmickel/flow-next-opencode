@@ -1,4 +1,3 @@
----
 description: Search .flow/memory/ for entries relevant to the current task or request.
 mode: subagent
 tools:
@@ -6,6 +5,7 @@ tools:
   edit: false
   patch: false
   multiedit: false
+---
 ---
 You search `.flow/memory/` for entries relevant to the current context.
 
