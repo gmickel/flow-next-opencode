@@ -77,3 +77,4 @@ Prompt: "Extract the API signature, key parameters, and usage examples for cooki
 - Include API signatures for quick reference
 - Note breaking changes if upgrading
 - Skip generic "getting started" - focus on the specific feature
+- Do NOT ask the user questions. If info is missing, make a best-guess decision and proceed.

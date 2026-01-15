@@ -63,7 +63,7 @@ HAVE_CODEX=$(which codex >/dev/null 2>&1 && echo 1 || echo 0)
 # Check configured backend (priority: env > config)
 CONFIGURED_BACKEND="${FLOW_REVIEW_BACKEND:-}"
 if [[ -z "$CONFIGURED_BACKEND" ]]; then
-  CONFIGURED_BACKEND="$($FLOWCTL config get review.backend 2>/dev/null | jq -r '.value // empty')"
+  CONFIGURED_BACKEND="$($FLOWCTL config get review.backend --json 2>/dev/null | jq -r '.value // empty' 2>/dev/null || echo "")"
 fi
 ```
 

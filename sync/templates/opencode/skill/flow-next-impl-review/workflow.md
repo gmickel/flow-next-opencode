@@ -25,7 +25,7 @@ HAVE_RP=$(which rp-cli >/dev/null 2>&1 && echo 1 || echo 0)
 # Get configured backend (priority: env > config)
 BACKEND="${FLOW_REVIEW_BACKEND:-}"
 if [[ -z "$BACKEND" ]]; then
-  BACKEND="$($FLOWCTL config get review.backend 2>/dev/null | jq -r '.value // empty' 2>/dev/null || echo "")"
+  BACKEND="$($FLOWCTL config get review.backend --json 2>/dev/null | jq -r '.value // empty' 2>/dev/null || echo "")"
 fi
 
 # Fallback to available (opencode preferred)
