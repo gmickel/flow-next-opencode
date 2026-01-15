@@ -1126,6 +1126,146 @@ def validate_task_spec_headings(content: str) -> list[str]:
     return errors
 
 
+def clear_task_evidence(task_id: str) -> None:
+    """Clear ## Evidence section contents but keep the heading with empty template."""
+    flow_dir = get_flow_dir()
+    spec_path = flow_dir / TASKS_DIR / f"{task_id}.md"
+    if not spec_path.exists():
+        return
+    content = spec_path.read_text(encoding="utf-8")
+
+    # Replace contents under ## Evidence with empty template, keeping heading
+    # Pattern: ## Evidence\n<content until next ## or end of file>
+    # Handle both LF and CRLF line endings
+    pattern = r"(## Evidence\s*\r?\n).*?(?=\r?\n## |\Z)"
+    replacement = r"\g<1>- Commits:\n- Tests:\n- PRs:\n"
+    new_content = re.sub(pattern, replacement, content, flags=re.DOTALL)
+
+    if new_content != content:
+        atomic_write(spec_path, new_content)
+
+
+def find_dependents(task_id: str, same_epic: bool = False) -> list[str]:
+    """Find tasks that depend on task_id (recursive). Returns list of dependent task IDs."""
+    flow_dir = get_flow_dir()
+    tasks_dir = flow_dir / TASKS_DIR
+    if not tasks_dir.exists():
+        return []
+
+    epic_id = epic_id_from_task(task_id) if same_epic else None
+    dependents: set[str] = set()  # Use set to avoid duplicates
+    to_check = [task_id]
+    checked = set()
+
+    while to_check:
+        checking = to_check.pop(0)
+        if checking in checked:
+            continue
+        checked.add(checking)
+
+        for task_file in tasks_dir.glob("fn-*.json"):
+            if "." not in task_file.stem:
+                continue
+            try:
+                task_data = load_json(task_file)
+                tid = task_data.get("id", task_file.stem)
+                if tid in checked or tid in dependents:
+                    continue
+                # Skip if same_epic filter and different epic
+                if same_epic and epic_id_from_task(tid) != epic_id:
+                    continue
+                deps = task_data.get("depends_on", [])
+                if checking in deps:
+                    dependents.add(tid)
+                    to_check.append(tid)
+            except Exception:
+                pass
+
+    return sorted(dependents)
+
+
+# --- Ralph Run Detection ---
+
+
+def find_active_runs() -> list[dict]:
+    """
+    Find active Ralph runs by scanning scripts/ralph/runs/*/progress.txt.
+    A run is active if progress.txt exists AND does NOT contain 'promise=COMPLETE'.
+    Returns list of dicts with run info.
+    """
+    repo_root = get_repo_root()
+    runs_dir = repo_root / "scripts" / "ralph" / "runs"
+    active_runs = []
+
+    if not runs_dir.exists():
+        return active_runs
+
+    for run_dir in runs_dir.iterdir():
+        if not run_dir.is_dir():
+            continue
+        progress_file = run_dir / "progress.txt"
+        if not progress_file.exists():
+            continue
+
+        content = progress_file.read_text(encoding="utf-8", errors="replace")
+
+        # Run is complete if it contains the completion marker block
+        # Require both completion_reason= AND promise=COMPLETE to avoid
+        # false positives from per-iteration promise= logging
+        if "completion_reason=" in content and "promise=COMPLETE" in content:
+            continue
+
+        # Parse progress info from content
+        run_info = {
+            "id": run_dir.name,
+            "path": str(run_dir),
+            "iteration": None,
+            "current_epic": None,
+            "current_task": None,
+            "paused": (run_dir / "PAUSE").exists(),
+            "stopped": (run_dir / "STOP").exists(),
+        }
+
+        # Extract iteration number (format: "iteration: N" or "Iteration N")
+        iter_match = re.search(r"iteration[:\s]+(\d+)", content, re.IGNORECASE)
+        if iter_match:
+            run_info["iteration"] = int(iter_match.group(1))
+
+        # Extract current epic/task (format varies, try common patterns)
+        epic_match = re.search(r"epic[:\s]+(fn-[\w-]+)", content, re.IGNORECASE)
+        if epic_match:
+            run_info["current_epic"] = epic_match.group(1)
+
+        task_match = re.search(r"task[:\s]+(fn-[\w.-]+\.\d+)", content, re.IGNORECASE)
+        if task_match:
+            run_info["current_task"] = task_match.group(1)
+
+        active_runs.append(run_info)
+
+    return active_runs
+
+
+def find_active_run(
+    run_id: Optional[str] = None, use_json: bool = False
+) -> tuple[str, Path]:
+    """
+    Find a single active run. Auto-detect if run_id is None.
+    Returns (run_id, run_dir) tuple.
+    """
+    runs = find_active_runs()
+    if run_id:
+        matches = [r for r in runs if r["id"] == run_id]
+        if not matches:
+            error_exit(f"Run {run_id} not found or not active", use_json=use_json)
+        return matches[0]["id"], Path(matches[0]["path"])
+    if len(runs) == 0:
+        error_exit("No active runs", use_json=use_json)
+    if len(runs) > 1:
+        ids = ", ".join(r["id"] for r in runs)
+        error_exit(f"Multiple active runs, specify --run: {ids}", use_json=use_json)
+    return runs[0]["id"], Path(runs[0]["path"])
+
+
 # --- Commands ---
 
 
@@ -1205,6 +1345,169 @@ def cmd_detect(args: argparse.Namespace) -> None:
                 print(f"  - {issue}")
         else:
             print(".flow/ does not exist")
+
+
+def cmd_status(args: argparse.Namespace) -> None:
+    """Show .flow state and active Ralph runs."""
+    flow_dir = get_flow_dir()
+    flow_exists = flow_dir.exists()
+
+    # Count epics and tasks by status
+    epic_counts = {"open": 0, "done": 0}
+    task_counts = {"todo": 0, "in_progress": 0, "blocked": 0, "done": 0}
+
+    if flow_exists:
+        epics_dir = flow_dir / EPICS_DIR
+        tasks_dir = flow_dir / TASKS_DIR
+
+        if epics_dir.exists():
+            for epic_file in epics_dir.glob("fn-*.json"):
+                try:
+                    epic_data = load_json(epic_file)
+                    status = epic_data.get("status", "open")
+                    if status in epic_counts:
+                        epic_counts[status] += 1
+                except Exception:
+                    pass
+
+        if tasks_dir.exists():
+            for task_file in tasks_dir.glob("fn-*.json"):
+                try:
+                    task_data = load_json(task_file)
+                    status = task_data.get("status", "todo")
+                    if status in task_counts:
+                        task_counts[status] += 1
+                except Exception:
+                    pass
+
+    active_runs = find_active_runs()
+
+    if args.json:
+        json_output(
+            {
+                "flow_exists": flow_exists,
+                "epics": epic_counts,
+                "tasks": task_counts,
+                "active_runs": active_runs,
+            }
+        )
+    else:
+        if flow_exists:
+            print("Flow status:")
+            print(f"  Epics: open={epic_counts['open']}, done={epic_counts['done']}")
+            print(
+                "  Tasks: todo={todo}, in_progress={in_progress}, blocked={blocked}, done={done}".format(
+                    **task_counts
+                )
+            )
+        else:
+            print(".flow/ does not exist")
+
+        if active_runs:
+            print("\nActive Ralph runs:")
+            for run in active_runs:
+                state = []
+                if run.get("paused"):
+                    state.append("PAUSED")
+                if run.get("stopped"):
+                    state.append("STOPPED")
+                state_str = f" [{', '.join(state)}]" if state else ""
+                task_info = ""
+                if run.get("current_task"):
+                    task_info = f", task {run['current_task']}"
+                elif run.get("current_epic"):
+                    task_info = f", epic {run['current_epic']}"
+                iter_info = (
+                    f"iteration {run['iteration']}" if run.get("iteration") else "starting"
+                )
+                print(f"  {run['id']} ({iter_info}{task_info}){state_str}")
+        else:
+            print("\nNo active runs")
+
+
+def cmd_ralph_pause(args: argparse.Namespace) -> None:
+    """Pause a Ralph run."""
+    run_id, run_dir = find_active_run(args.run, use_json=args.json)
+    pause_file = run_dir / "PAUSE"
+    pause_file.touch()
+    if args.json:
+        json_output({"success": True, "run": run_id, "action": "paused"})
+    else:
+        print(f"Paused {run_id}")
+
+
+def cmd_ralph_resume(args: argparse.Namespace) -> None:
+    """Resume a paused Ralph run."""
+    run_id, run_dir = find_active_run(args.run, use_json=args.json)
+    pause_file = run_dir / "PAUSE"
+    pause_file.unlink(missing_ok=True)
+    if args.json:
+        json_output({"success": True, "run": run_id, "action": "resumed"})
+    else:
+        print(f"Resumed {run_id}")
+
+
+def cmd_ralph_stop(args: argparse.Namespace) -> None:
+    """Request a Ralph run to stop."""
+    run_id, run_dir = find_active_run(args.run, use_json=args.json)
+    stop_file = run_dir / "STOP"
+    stop_file.touch()
+    if args.json:
+        json_output({"success": True, "run": run_id, "action": "stop_requested"})
+    else:
+        print(f"Stop requested for {run_id}")
+
+
+def cmd_ralph_status(args: argparse.Namespace) -> None:
+    """Show Ralph run status."""
+    run_id, run_dir = find_active_run(args.run, use_json=args.json)
+    paused = (run_dir / "PAUSE").exists()
+    stopped = (run_dir / "STOP").exists()
+
+    # Read progress.txt for more info
+    progress_file = run_dir / "progress.txt"
+    iteration = None
+    current_epic = None
+    current_task = None
+
+    if progress_file.exists():
+        content = progress_file.read_text(encoding="utf-8", errors="replace")
+        iter_match = re.search(r"iteration[:\s]+(\d+)", content, re.IGNORECASE)
+        if iter_match:
+            iteration = int(iter_match.group(1))
+        epic_match = re.search(r"epic[:\s]+(fn-[\w-]+)", content, re.IGNORECASE)
+        if epic_match:
+            current_epic = epic_match.group(1)
+        task_match = re.search(r"task[:\s]+(fn-[\w.-]+\.\d+)", content, re.IGNORECASE)
+        if task_match:
+            current_task = task_match.group(1)
+
+    if args.json:
+        json_output(
+            {
+                "success": True,
+                "run": run_id,
+                "iteration": iteration,
+                "current_epic": current_epic,
+                "current_task": current_task,
+                "paused": paused,
+                "stopped": stopped,
+            }
+        )
+    else:
+        state = []
+        if paused:
+            state.append("PAUSED")
+        if stopped:
+            state.append("STOPPED")
+        state_str = f" [{', '.join(state)}]" if state else " [running]"
+        task_info = ""
+        if current_task:
+            task_info = f", working on {current_task}"
+        elif current_epic:
+            task_info = f", epic {current_epic}"
+        iter_info = f"iteration {iteration}" if iteration else "starting"
+        print(f"{run_id} ({iter_info}{task_info}){state_str}")
 
 
 def cmd_config_get(args: argparse.Namespace) -> None:
@@ -2184,6 +2487,132 @@ def cmd_epic_set_branch(args: argparse.Namespace) -> None:
         print(f"Epic {args.id} branch_name set to {args.branch}")
 
 
+def cmd_epic_add_dep(args: argparse.Namespace) -> None:
+    """Add epic-level dependency."""
+    if not ensure_flow_exists():
+        error_exit(
+            ".flow/ does not exist. Run 'flowctl init' first.", use_json=args.json
+        )
+
+    epic_id = args.epic
+    dep_id = args.depends_on
+
+    if not is_epic_id(epic_id):
+        error_exit(
+            f"Invalid epic ID: {epic_id}. Expected format: fn-N or fn-N-xxx",
+            use_json=args.json,
+        )
+    if not is_epic_id(dep_id):
+        error_exit(
+            f"Invalid epic ID: {dep_id}. Expected format: fn-N or fn-N-xxx",
+            use_json=args.json,
+        )
+    if epic_id == dep_id:
+        error_exit("Epic cannot depend on itself", use_json=args.json)
+
+    flow_dir = get_flow_dir()
+    epic_path = flow_dir / EPICS_DIR / f"{epic_id}.json"
+    dep_path = flow_dir / EPICS_DIR / f"{dep_id}.json"
+
+    if not epic_path.exists():
+        error_exit(f"Epic {epic_id} not found", use_json=args.json)
+    if not dep_path.exists():
+        error_exit(f"Epic {dep_id} not found", use_json=args.json)
+
+    epic_data = load_json_or_exit(epic_path, f"Epic {epic_id}", use_json=args.json)
+    deps = epic_data.get("depends_on_epics", [])
+
+    if dep_id in deps:
+        # Already exists, no-op success
+        if args.json:
+            json_output(
+                {
+                    "success": True,
+                    "id": epic_id,
+                    "depends_on_epics": deps,
+                    "message": f"{dep_id} already in dependencies",
+                }
+            )
+        else:
+            print(f"{dep_id} already in {epic_id} dependencies")
+        return
+
+    deps.append(dep_id)
+    epic_data["depends_on_epics"] = deps
+    epic_data["updated_at"] = now_iso()
+    atomic_write_json(epic_path, epic_data)
+
+    if args.json:
+        json_output(
+            {
+                "success": True,
+                "id": epic_id,
+                "depends_on_epics": deps,
+                "message": f"Added {dep_id} to {epic_id} dependencies",
+            }
+        )
+    else:
+        print(f"Added {dep_id} to {epic_id} dependencies")
+
+
+def cmd_epic_rm_dep(args: argparse.Namespace) -> None:
+    """Remove epic-level dependency."""
+    if not ensure_flow_exists():
+        error_exit(
+            ".flow/ does not exist. Run 'flowctl init' first.", use_json=args.json
+        )
+
+    epic_id = args.epic
+    dep_id = args.depends_on
+
+    if not is_epic_id(epic_id):
+        error_exit(
+            f"Invalid epic ID: {epic_id}. Expected format: fn-N or fn-N-xxx",
+            use_json=args.json,
+        )
+
+    flow_dir = get_flow_dir()
+    epic_path = flow_dir / EPICS_DIR / f"{epic_id}.json"
+
+    if not epic_path.exists():
+        error_exit(f"Epic {epic_id} not found", use_json=args.json)
+
+    epic_data = load_json_or_exit(epic_path, f"Epic {epic_id}", use_json=args.json)
+    deps = epic_data.get("depends_on_epics", [])
+
+    if dep_id not in deps:
+        # Not in deps, no-op success
+        if args.json:
+            json_output(
+                {
+                    "success": True,
+                    "id": epic_id,
+                    "depends_on_epics": deps,
+                    "message": f"{dep_id} not in dependencies",
+                }
+            )
+        else:
+            print(f"{dep_id} not in {epic_id} dependencies")
+        return
+
+    deps.remove(dep_id)
+    epic_data["depends_on_epics"] = deps
+    epic_data["updated_at"] = now_iso()
+    atomic_write_json(epic_path, epic_data)
+
+    if args.json:
+        json_output(
+            {
+                "success": True,
+                "id": epic_id,
+                "depends_on_epics": deps,
+                "message": f"Removed {dep_id} from {epic_id} dependencies",
+            }
+        )
+    else:
+        print(f"Removed {dep_id} from {epic_id} dependencies")
+
+
 def cmd_task_set_description(args: argparse.Namespace) -> None:
     """Set task description section."""
     _task_set_section(args.id, "## Description", args.file, args.json)
@@ -2192,6 +2621,111 @@ def cmd_task_set_description(args: argparse.Namespace) -> None:
 def cmd_task_set_acceptance(args: argparse.Namespace) -> None:
     """Set task acceptance section."""
     _task_set_section(args.id, "## Acceptance", args.file, args.json)
+
+
+def cmd_task_reset(args: argparse.Namespace) -> None:
+    """Reset task status to todo."""
+    if not ensure_flow_exists():
+        error_exit(
+            ".flow/ does not exist. Run 'flowctl init' first.", use_json=args.json
+        )
+
+    task_id = args.task_id
+    if not is_task_id(task_id):
+        error_exit(
+            f"Invalid task ID: {task_id}. Expected format: fn-N.M or fn-N-xxx.M",
+            use_json=args.json,
+        )
+
+    flow_dir = get_flow_dir()
+    task_json_path = flow_dir / TASKS_DIR / f"{task_id}.json"
+
+    if not task_json_path.exists():
+        error_exit(f"Task {task_id} not found", use_json=args.json)
+
+    task_data = load_json_or_exit(task_json_path, f"Task {task_id}", use_json=args.json)
+
+    # Load epic to check if closed
+    epic_id = epic_id_from_task(task_id)
+    epic_path = flow_dir / EPICS_DIR / f"{epic_id}.json"
+    if epic_path.exists():
+        epic_data = load_json_or_exit(epic_path, f"Epic {epic_id}", use_json=args.json)
+        if epic_data.get("status") == "done":
+            error_exit(
+                f"Cannot reset task in closed epic {epic_id}", use_json=args.json
+            )
+
+    # Check status validations
+    current_status = task_data.get("status", "todo")
+    if current_status == "in_progress":
+        error_exit(
+            f"Cannot reset in_progress task {task_id}. Complete or block it first.",
+            use_json=args.json,
+        )
+    if current_status == "todo":
+        # Already todo - no-op success
+        if args.json:
+            json_output(
+                {"success": True, "reset": [], "message": f"{task_id} already todo"}
+            )
+        else:
+            print(f"{task_id} already todo")
+        return
+
+    # Reset task
+    task_data["status"] = "todo"
+    task_data["updated_at"] = now_iso()
+
+    # Clear optional fields
+    task_data.pop("blocked_reason", None)
+    task_data.pop("completed_at", None)
+
+    # Clear claim fields (MU-2)
+    task_data.pop("assignee", None)
+    task_data.pop("claimed_at", None)
+    task_data.pop("claim_note", None)
+
+    # Clear evidence from JSON
+    task_data.pop("evidence", None)
+
+    atomic_write_json(task_json_path, task_data)
+
+    # Clear evidence section from spec markdown
+    clear_task_evidence(task_id)
+
+    reset_ids = [task_id]
+
+    # Handle cascade
+    if args.cascade:
+        dependents = find_dependents(task_id, same_epic=True)
+        for dep_id in dependents:
+            dep_path = flow_dir / TASKS_DIR / f"{dep_id}.json"
+            if not dep_path.exists():
+                continue
+            dep_data = load_json(dep_path)
+            dep_status = dep_data.get("status", "todo")
+
+            # Skip in_progress and already todo
+            if dep_status == "in_progress" or dep_status == "todo":
+                continue
+
+            dep_data["status"] = "todo"
+            dep_data["updated_at"] = now_iso()
+            dep_data.pop("blocked_reason", None)
+            dep_data.pop("completed_at", None)
+            dep_data.pop("assignee", None)
+            dep_data.pop("claimed_at", None)
+            dep_data.pop("claim_note", None)
+            dep_data.pop("evidence", None)
+
+            atomic_write_json(dep_path, dep_data)
+            clear_task_evidence(dep_id)
+            reset_ids.append(dep_id)
+
+    if args.json:
+        json_output({"success": True, "reset": reset_ids})
+    else:
+        print(f"Reset: {', '.join(reset_ids)}")
 
 
 def _task_set_section(
@@ -3719,6 +4253,11 @@ def main() -> None:
     p_detect.add_argument("--json", action="store_true", help="JSON output")
     p_detect.set_defaults(func=cmd_detect)
 
+    # status
+    p_status = subparsers.add_parser("status", help="Show .flow state + Ralph runs")
+    p_status.add_argument("--json", action="store_true", help="JSON output")
+    p_status.set_defaults(func=cmd_status)
+
     # config
     p_config = subparsers.add_parser("config", help="Config commands")
     config_sub = p_config.add_subparsers(dest="config_cmd", required=True)
@@ -3806,6 +4345,18 @@ def main() -> None:
     p_epic_close.add_argument("--json", action="store_true", help="JSON output")
     p_epic_close.set_defaults(func=cmd_epic_close)
 
+    p_epic_add_dep = epic_sub.add_parser("add-dep", help="Add epic-level dependency")
+    p_epic_add_dep.add_argument("epic", help="Epic ID")
+    p_epic_add_dep.add_argument("depends_on", help="Epic ID to depend on")
+    p_epic_add_dep.add_argument("--json", action="store_true", help="JSON output")
+    p_epic_add_dep.set_defaults(func=cmd_epic_add_dep)
+
+    p_epic_rm_dep = epic_sub.add_parser("rm-dep", help="Remove epic-level dependency")
+    p_epic_rm_dep.add_argument("epic", help="Epic ID")
+    p_epic_rm_dep.add_argument("depends_on", help="Epic ID to remove from deps")
+    p_epic_rm_dep.add_argument("--json", action="store_true", help="JSON output")
+    p_epic_rm_dep.set_defaults(func=cmd_epic_rm_dep)
+
     # task create
     p_task = subparsers.add_parser("task", help="Task commands")
     task_sub = p_task.add_subparsers(dest="task_cmd", required=True)
@@ -3834,6 +4385,14 @@ def main() -> None:
     p_task_acc.add_argument("--file", required=True, help="Markdown file")
     p_task_acc.add_argument("--json", action="store_true", help="JSON output")
     p_task_acc.set_defaults(func=cmd_task_set_acceptance)
+
+    p_task_reset = task_sub.add_parser("reset", help="Reset task to todo")
+    p_task_reset.add_argument("task_id", help="Task ID (fn-N.M)")
+    p_task_reset.add_argument(
+        "--cascade", action="store_true", help="Also reset dependent tasks (same epic)"
+    )
+    p_task_reset.add_argument("--json", action="store_true", help="JSON output")
+    p_task_reset.set_defaults(func=cmd_task_reset)
 
     # dep add
     p_dep = subparsers.add_parser("dep", help="Dependency commands")
@@ -3953,6 +4512,30 @@ def main() -> None:
     )
     p_prep.add_argument("--output", "-o", help="Output file (default: stdout)")
     p_prep.set_defaults(func=cmd_prep_chat)
+
+    # ralph (Ralph run control)
+    p_ralph = subparsers.add_parser("ralph", help="Ralph run control commands")
+    ralph_sub = p_ralph.add_subparsers(dest="ralph_cmd", required=True)
+
+    p_ralph_pause = ralph_sub.add_parser("pause", help="Pause a Ralph run")
+    p_ralph_pause.add_argument("--run", help="Run ID (auto-detect if single)")
+    p_ralph_pause.add_argument("--json", action="store_true", help="JSON output")
+    p_ralph_pause.set_defaults(func=cmd_ralph_pause)
+
+    p_ralph_resume = ralph_sub.add_parser("resume", help="Resume a paused Ralph run")
+    p_ralph_resume.add_argument("--run", help="Run ID (auto-detect if single)")
+    p_ralph_resume.add_argument("--json", action="store_true", help="JSON output")
+    p_ralph_resume.set_defaults(func=cmd_ralph_resume)
+
+    p_ralph_stop = ralph_sub.add_parser("stop", help="Request a Ralph run to stop")
+    p_ralph_stop.add_argument("--run", help="Run ID (auto-detect if single)")
+    p_ralph_stop.add_argument("--json", action="store_true", help="JSON output")
+    p_ralph_stop.set_defaults(func=cmd_ralph_stop)
+
+    p_ralph_status = ralph_sub.add_parser("status", help="Show Ralph run status")
+    p_ralph_status.add_argument("--run", help="Run ID (auto-detect if single)")
+    p_ralph_status.add_argument("--json", action="store_true", help="JSON output")
+    p_ralph_status.set_defaults(func=cmd_ralph_status)
 
     # rp (RepoPrompt wrappers)
     p_rp = subparsers.add_parser("rp", help="RepoPrompt helpers")

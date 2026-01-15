@@ -1,0 +1,54 @@
+name: flow-next
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "plugins/flow-next/**"
+      - ".github/workflows/test-flow-next.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "plugins/flow-next/**"
+      - ".github/workflows/test-flow-next.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check flowctl.py syntax
+        run: python -m py_compile plugins/flow-next/scripts/flowctl.py
+
+      - name: Check ralph.sh syntax (Unix)
+        if: runner.os != 'Windows'
+        run: bash -n plugins/flow-next/skills/flow-next-ralph-init/templates/ralph.sh
+
+      - name: Check ralph.sh syntax (Windows Git Bash)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: bash -n plugins/flow-next/skills/flow-next-ralph-init/templates/ralph.sh
+
+      - name: Run comprehensive tests (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd /tmp
+          bash "$GITHUB_WORKSPACE/plugins/flow-next/scripts/ci_test.sh"
+
+      - name: Run comprehensive tests (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP"
+          bash "$GITHUB_WORKSPACE/plugins/flow-next/scripts/ci_test.sh"

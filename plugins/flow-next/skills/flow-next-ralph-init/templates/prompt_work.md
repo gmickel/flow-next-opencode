@@ -5,16 +5,16 @@ Inputs:
 - BRANCH_MODE={{BRANCH_MODE_EFFECTIVE}}
 - WORK_REVIEW={{WORK_REVIEW}}
 
+Treat the following as the user's exact input to flow-next-work:
+`{{TASK_ID}} --branch={{BRANCH_MODE_EFFECTIVE}} --review={{WORK_REVIEW}}`
+
 ## Steps (execute ALL in order)
 
 **Step 1: Execute task**
-```
-/flow-next:work {{TASK_ID}} --branch={{BRANCH_MODE_EFFECTIVE}} --review={{WORK_REVIEW}}
-```
-When `--review=rp`, the work skill MUST invoke `/flow-next:impl-review` internally (see Phase 7 in skill).
-When `--review=codex`, the work skill uses `flowctl codex impl-review` for review.
-The impl-review skill handles review coordination and requires `<verdict>SHIP|NEEDS_WORK|MAJOR_RETHINK</verdict>` from reviewer.
-Do NOT improvise review prompts - the skill has the correct format.
+- Call the skill tool: flow-next-work.
+- Follow the workflow in the skill using the exact arguments above.
+- Do NOT run /flow-next:* as shell commands.
+- Do NOT improvise review prompts; use the skill's review flow.
 
 **Step 2: Verify task done** (AFTER skill returns)
 ```bash
@@ -22,18 +22,16 @@ scripts/ralph/flowctl show {{TASK_ID}} --json
 ```
 If status != `done`, output `<promise>RETRY</promise>` and stop.
 
-**Step 3: Write impl receipt** (MANDATORY if WORK_REVIEW=rp or codex)
-For rp mode:
+**Step 3: Write impl receipt** (MANDATORY if WORK_REVIEW != none)
 ```bash
 mkdir -p "$(dirname '{{REVIEW_RECEIPT_PATH}}')"
 ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 cat > '{{REVIEW_RECEIPT_PATH}}' <<EOF
-{"type":"impl_review","id":"{{TASK_ID}}","mode":"rp","timestamp":"$ts"}
+{"type":"impl_review","id":"{{TASK_ID}}","mode":"{{WORK_REVIEW}}","timestamp":"$ts"}
 EOF
 echo "Receipt written: {{REVIEW_RECEIPT_PATH}}"
 ```
-For codex mode, receipt is written automatically by `flowctl codex impl-review --receipt`.
-**CRITICAL: Copy the command EXACTLY. The `"id":"{{TASK_ID}}"` field is REQUIRED.**
+**CRITICAL: Copy the command EXACTLY. The "id":"{{TASK_ID}}" field is REQUIRED.**
 Ralph verifies receipts match this exact schema. Missing id = verification fails = forced retry.
 
 **Step 4: Validate epic**

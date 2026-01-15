@@ -2,7 +2,7 @@
 
 # Flow-Next (OpenCode)
 
-[![Version](https://img.shields.io/badge/Version-0.1.0-green)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-0.2.0-green)](./CHANGELOG.md)
 [![Status](https://img.shields.io/badge/Status-Experimental-orange)](./CHANGELOG.md)
 
 **Plan first, work second. OpenCode-native port of Flow-Next.**
@@ -13,7 +13,7 @@
 
 ---
 
-> **Experimental.** Active work-in-progress while we chase parity with upstream. Ralph mode coming soon.
+> **Experimental.** Active work-in-progress while we chase parity with upstream. **Ralph mode is now available (experimental).**
 
 ---
 
@@ -345,7 +345,23 @@ Config lives in `.flow/config.json` , separate from Ralph’s `scripts/ralph/con
 
 ## Ralph (Autonomous Mode)
 
-Ralph scaffolding is present ( `/flow-next:ralph-init` ), but OpenCode-native automation is **not yet fully ported**. Expect changes here as parity work continues. Upstream docs are included at `plugins/flow-next/docs/ralph.md` and are Claude-specific.
+Ralph automation is available ( `/flow-next:ralph-init` ). Docs live at `plugins/flow-next/docs/ralph.md` (setup, `config.env`, `.opencode/opencode.json`, logs).
+
+### Controlling Ralph
+
+```bash
+flowctl status
+flowctl ralph pause
+flowctl ralph resume
+flowctl ralph stop
+```
+
+Manual sentinels:
+```bash
+touch scripts/ralph/runs/<run-id>/PAUSE
+rm scripts/ralph/runs/<run-id>/PAUSE
+touch scripts/ralph/runs/<run-id>/STOP
+```
 
 ---
 
