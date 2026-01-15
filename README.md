@@ -15,6 +15,8 @@
 
 > **Experimental.** Active work-in-progress while we chase parity with upstream. **Ralph mode is now available (experimental).**
 
+Ralph docs: `plugins/flow-next/docs/ralph.md`
+
 ---
 
 ## What Is This?
