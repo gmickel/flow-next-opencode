@@ -314,7 +314,7 @@ ui_fail() {
 }
 
 ui_waiting() {
-  ui "   ${C_DIM}⏳ Claude working...${C_RESET}"
+  ui "   ${C_DIM}⏳ OpenCode working...${C_RESET}"
 }
 
 [[ -f "$CONFIG" ]] || fail "missing config.env"
@@ -326,7 +326,7 @@ source "$CONFIG"
 set +a
 
 MAX_ITERATIONS="${MAX_ITERATIONS:-25}"
-MAX_TURNS="${MAX_TURNS:-}"  # empty = no limit; Claude stops via promise tags
+MAX_TURNS="${MAX_TURNS:-}"  # empty = no limit; model stops via promise tags
 MAX_ATTEMPTS_PER_TASK="${MAX_ATTEMPTS_PER_TASK:-5}"
 WORKER_TIMEOUT="${WORKER_TIMEOUT:-1800}"  # 30min default; prevents stuck workers
 BRANCH_MODE="${BRANCH_MODE:-new}"
@@ -978,7 +978,7 @@ Violations break automation and leave the user with incomplete work. Be precise,
 
   if [[ "$exit_code" -eq 1 ]]; then
     log "exit=fail"
-    ui_fail "Claude returned FAIL promise"
+    ui_fail "OpenCode returned FAIL promise"
     write_completion_marker "FAILED"
     exit 1
   fi
@@ -1002,7 +1002,7 @@ Violations break automation and leave the user with incomplete work. Be precise,
     fi
   fi
 
-  # Check for pause/stop after Claude returns (before next iteration)
+  # Check for pause/stop after OpenCode returns (before next iteration)
   check_sentinels
 
   sleep 2

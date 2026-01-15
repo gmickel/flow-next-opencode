@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Watch filter for Ralph - parses Claude's stream-json output and shows key events.
+Watch filter for Ralph - parses OpenCode run --format json output (and Claude fallback).
 
 Reads JSON lines from stdin, outputs formatted tool calls in TUI style.
 
 CRITICAL: This filter is "fail open" - if output breaks, it continues draining
-stdin to prevent SIGPIPE cascading to upstream processes (tee, claude).
+stdin to prevent SIGPIPE cascading to upstream processes (tee, opencode).
 
 Usage:
     watch-filter.py           # Show tool calls only
@@ -190,7 +190,7 @@ def process_event(event: dict, verbose: bool) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Filter Claude stream-json output")
+    parser = argparse.ArgumentParser(description="Filter OpenCode run --format json output")
     parser.add_argument(
         "--verbose",
         action="store_true",

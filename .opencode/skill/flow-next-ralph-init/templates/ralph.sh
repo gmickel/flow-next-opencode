@@ -1,10 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Windows / Git Bash hardening (GH-35)
+# ─────────────────────────────────────────────────────────────────────────────
+UNAME_S="$(uname -s 2>/dev/null || echo "")"
+IS_WINDOWS=0
+case "$UNAME_S" in
+  MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=1 ;;
+esac
+
+# Python detection: prefer python3, fallback to python (common on Windows)
+pick_python() {
+  if [[ -n "${PYTHON_BIN:-}" ]]; then
+    command -v "$PYTHON_BIN" >/dev/null 2>&1 && { echo "$PYTHON_BIN"; return; }
+  fi
+  if command -v python3 >/dev/null 2>&1; then echo "python3"; return; fi
+  if command -v python  >/dev/null 2>&1; then echo "python"; return; fi
+  echo ""
+}
+
+PYTHON_BIN="$(pick_python)"
+[[ -n "$PYTHON_BIN" ]] || { echo "ralph: python not found (need python3 or python in PATH)" >&2; exit 1; }
+export PYTHON_BIN
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CONFIG="$SCRIPT_DIR/config.env"
 FLOWCTL="$SCRIPT_DIR/flowctl"
+FLOWCTL_PY="$SCRIPT_DIR/flowctl.py"
 
 fail() { echo "ralph: $*" >&2; exit 1; }
 log() {
@@ -12,6 +36,35 @@ log() {
   [[ "${UI_ENABLED:-1}" != "1" ]] && echo "ralph: $*"
   return 0
 }
+
+# Ensure flowctl is runnable even when NTFS exec bit / shebang handling is flaky on Windows
+ensure_flowctl_wrapper() {
+  # If flowctl exists and is executable, use it
+  if [[ -f "$FLOWCTL" && -x "$FLOWCTL" ]]; then
+    return 0
+  fi
+
+  # On Windows or if flowctl not executable, create a wrapper that calls Python explicitly
+  if [[ -f "$FLOWCTL_PY" ]]; then
+    local wrapper="$SCRIPT_DIR/flowctl-wrapper.sh"
+    cat > "$wrapper" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+PY="\${PYTHON_BIN:-python3}"
+command -v "\$PY" >/dev/null 2>&1 || PY="python"
+exec "\$PY" "\$DIR/flowctl.py" "\$@"
+SH
+    chmod +x "$wrapper" 2>/dev/null || true
+    FLOWCTL="$wrapper"
+    export FLOWCTL
+    return 0
+  fi
+
+  fail "missing flowctl (expected $SCRIPT_DIR/flowctl or $SCRIPT_DIR/flowctl.py)"
+}
+
+ensure_flowctl_wrapper
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Presentation layer (human-readable output)
@@ -59,7 +112,7 @@ ui() {
 # Get title from epic/task JSON
 get_title() {
   local json="$1"
-  python3 - "$json" <<'PY'
+  "$PYTHON_BIN" - "$json" <<'PY'
 import json, sys
 try:
     data = json.loads(sys.argv[1])
@@ -71,7 +124,7 @@ PY
 
 # Count progress (done/total tasks for scoped epics)
 get_progress() {
-  python3 - "$ROOT_DIR" "${EPICS_FILE:-}" <<'PY'
+  "$PYTHON_BIN" - "$ROOT_DIR" "${EPICS_FILE:-}" <<'PY'
 import json, sys
 from pathlib import Path
 root = Path(sys.argv[1])
@@ -125,7 +178,7 @@ get_git_stats() {
     echo ""
     return
   fi
-  python3 - "$stats" <<'PY'
+  "$PYTHON_BIN" - "$stats" <<'PY'
 import re, sys
 s = sys.argv[1]
 files = re.search(r"(\d+) files? changed", s)
@@ -157,9 +210,9 @@ ui_config() {
 
   local plan_display="$PLAN_REVIEW" work_display="$WORK_REVIEW"
   [[ "$PLAN_REVIEW" == "rp" ]] && plan_display="RepoPrompt"
-  [[ "$PLAN_REVIEW" == "opencode" ]] && plan_display="OpenCode"
+  [[ "$PLAN_REVIEW" == "codex" ]] && plan_display="Codex"
   [[ "$WORK_REVIEW" == "rp" ]] && work_display="RepoPrompt"
-  [[ "$WORK_REVIEW" == "opencode" ]] && work_display="OpenCode"
+  [[ "$WORK_REVIEW" == "codex" ]] && work_display="Codex"
   ui "${C_DIM}   Reviews:${C_RESET} Plan=$plan_display ${C_DIM}•${C_RESET} Work=$work_display"
   [[ -n "${EPICS:-}" ]] && ui "${C_DIM}   Scope:${C_RESET} $EPICS"
   ui ""
@@ -190,10 +243,10 @@ ui_plan_review() {
     ui ""
     ui "   ${C_YELLOW}📝 Plan Review${C_RESET}"
     ui "      ${C_DIM}Sending to reviewer via RepoPrompt...${C_RESET}"
-  elif [[ "$mode" == "opencode" ]]; then
+  elif [[ "$mode" == "codex" ]]; then
     ui ""
     ui "   ${C_YELLOW}📝 Plan Review${C_RESET}"
-    ui "      ${C_DIM}Sending to reviewer via OpenCode...${C_RESET}"
+    ui "      ${C_DIM}Sending to reviewer via Codex...${C_RESET}"
   fi
 }
 
@@ -203,10 +256,10 @@ ui_impl_review() {
     ui ""
     ui "   ${C_MAGENTA}🔍 Implementation Review${C_RESET}"
     ui "      ${C_DIM}Sending to reviewer via RepoPrompt...${C_RESET}"
-  elif [[ "$mode" == "opencode" ]]; then
+  elif [[ "$mode" == "codex" ]]; then
     ui ""
     ui "   ${C_MAGENTA}🔍 Implementation Review${C_RESET}"
-    ui "      ${C_DIM}Sending to reviewer via OpenCode...${C_RESET}"
+    ui "      ${C_DIM}Sending to reviewer via Codex...${C_RESET}"
   fi
 }
 
@@ -273,7 +326,7 @@ source "$CONFIG"
 set +a
 
 MAX_ITERATIONS="${MAX_ITERATIONS:-25}"
-MAX_TURNS="${MAX_TURNS:-}"  # empty = no limit; unused for OpenCode (kept for parity)
+MAX_TURNS="${MAX_TURNS:-}"  # empty = no limit; model stops via promise tags
 MAX_ATTEMPTS_PER_TASK="${MAX_ATTEMPTS_PER_TASK:-5}"
 WORKER_TIMEOUT="${WORKER_TIMEOUT:-1800}"  # 30min default; prevents stuck workers
 BRANCH_MODE="${BRANCH_MODE:-new}"
@@ -318,7 +371,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Set up signal trap for clean Ctrl+C handling
-# Must kill all child processes including timeout and worker
+# Must kill all child processes including timeout and claude
 cleanup() {
   trap - SIGINT SIGTERM  # Prevent re-entry
   # Kill all child processes
@@ -329,7 +382,7 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM
 
-OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
+CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 
 # Detect timeout command (GNU coreutils). On macOS: brew install coreutils
 # Use --foreground to keep child in same process group for signal handling
@@ -356,17 +409,17 @@ sanitize_id() {
 
 get_actor() {
   if [[ -n "${FLOW_ACTOR:-}" ]]; then echo "$FLOW_ACTOR"; return; fi
-  if actor="$(git -C "$ROOT_DIR" config user.name 2>/dev/null)"; then
+  if actor="$(git -C "$ROOT_DIR" config user.email 2>/dev/null)"; then
     [[ -n "$actor" ]] && { echo "$actor"; return; }
   fi
-  if actor="$(git -C "$ROOT_DIR" config user.email 2>/dev/null)"; then
+  if actor="$(git -C "$ROOT_DIR" config user.name 2>/dev/null)"; then
     [[ -n "$actor" ]] && { echo "$actor"; return; }
   fi
   echo "${USER:-unknown}"
 }
 
 rand4() {
-  python3 - <<'PY'
+  "$PYTHON_BIN" - <<'PY'
 import secrets
 print(secrets.token_hex(2))
 PY
@@ -374,7 +427,7 @@ PY
 
 render_template() {
   local path="$1"
-  python3 - "$path" <<'PY'
+  "$PYTHON_BIN" - "$path" <<'PY'
 import os, sys
 path = sys.argv[1]
 text = open(path, encoding="utf-8").read()
@@ -388,7 +441,7 @@ PY
 json_get() {
   local key="$1"
   local json="$2"
-  python3 - "$key" "$json" <<'PY'
+  "$PYTHON_BIN" - "$key" "$json" <<'PY'
 import json, sys
 key = sys.argv[1]
 data = json.loads(sys.argv[2])
@@ -407,7 +460,7 @@ ensure_attempts_file() {
 }
 
 bump_attempts() {
-  python3 - "$1" "$2" <<'PY'
+  "$PYTHON_BIN" - "$1" "$2" <<'PY'
 import json, sys, os
 path, task = sys.argv[1], sys.argv[2]
 data = {}
@@ -423,7 +476,7 @@ PY
 }
 
 write_epics_file() {
-  python3 - "$1" <<'PY'
+  "$PYTHON_BIN" - "$1" <<'PY'
 import json, sys
 raw = sys.argv[1]
 parts = [p.strip() for p in raw.replace(",", " ").split() if p.strip()]
@@ -449,7 +502,7 @@ PROGRESS_FILE="$RUN_DIR/progress.txt"
 
 extract_tag() {
   local tag="$1"
-  python3 - "$tag" <<'PY'
+  "$PYTHON_BIN" - "$tag" <<'PY'
 import re, sys
 tag = sys.argv[1]
 text = sys.stdin.read()
@@ -459,9 +512,9 @@ PY
 }
 
 # Extract assistant text from stream-json log (for tag extraction in watch mode)
-extract_text_from_run_json() {
+extract_text_from_stream_json() {
   local log_file="$1"
-  python3 - "$log_file" <<'PY'
+  "$PYTHON_BIN" - "$log_file" <<'PY'
 import json, sys
 path = sys.argv[1]
 out = []
@@ -475,21 +528,12 @@ try:
                 ev = json.loads(line)
             except json.JSONDecodeError:
                 continue
-
-            # OpenCode run --format json
-            if ev.get("type") == "text":
-                part = ev.get("part") or {}
-                text = part.get("text", "")
-                if text:
-                    out.append(text)
+            if ev.get("type") != "assistant":
                 continue
-
-            # Claude stream-json (fallback)
-            if ev.get("type") == "assistant":
-                msg = ev.get("message") or {}
-                for blk in (msg.get("content") or []):
-                    if blk.get("type") == "text":
-                        out.append(blk.get("text", ""))
+            msg = ev.get("message") or {}
+            for blk in (msg.get("content") or []):
+                if blk.get("type") == "text":
+                    out.append(blk.get("text", ""))
 except Exception:
     pass
 print("\n".join(out))
@@ -508,7 +552,7 @@ append_progress() {
   {
     echo "## $(date -u +%Y-%m-%dT%H:%M:%SZ) - iter $iter"
     echo "status=$status epic=${epic_id:-} task=${task_id:-} reason=${reason:-}"
-    echo "worker_rc=$worker_rc"
+    echo "claude_rc=$claude_rc"
     echo "verdict=${verdict:-}"
     echo "promise=${promise:-}"
     echo "receipt=${REVIEW_RECEIPT_PATH:-} exists=$receipt_exists"
@@ -565,7 +609,7 @@ init_branches_file() {
   if [[ -f "$BRANCHES_FILE" ]]; then return; fi
   local base_branch
   base_branch="$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-  python3 - "$BRANCHES_FILE" "$base_branch" <<'PY'
+  "$PYTHON_BIN" - "$BRANCHES_FILE" "$base_branch" <<'PY'
 import json, sys
 path, base = sys.argv[1], sys.argv[2]
 data = {"base_branch": base, "run_branch": ""}
@@ -575,7 +619,7 @@ PY
 }
 
 get_base_branch() {
-  python3 - "$BRANCHES_FILE" <<'PY'
+  "$PYTHON_BIN" - "$BRANCHES_FILE" <<'PY'
 import json, sys
 try:
     with open(sys.argv[1], encoding="utf-8") as f:
@@ -587,7 +631,7 @@ PY
 }
 
 get_run_branch() {
-  python3 - "$BRANCHES_FILE" <<'PY'
+  "$PYTHON_BIN" - "$BRANCHES_FILE" <<'PY'
 import json, sys
 try:
     with open(sys.argv[1], encoding="utf-8") as f:
@@ -599,7 +643,7 @@ PY
 }
 
 set_run_branch() {
-  python3 - "$BRANCHES_FILE" "$1" <<'PY'
+  "$PYTHON_BIN" - "$BRANCHES_FILE" "$1" <<'PY'
 import json, sys
 path, branch = sys.argv[1], sys.argv[2]
 data = {"base_branch": "", "run_branch": ""}
@@ -615,7 +659,7 @@ PY
 }
 
 list_epics_from_file() {
-  python3 - "$EPICS_FILE" <<'PY'
+  "$PYTHON_BIN" - "$EPICS_FILE" <<'PY'
 import json, sys
 path = sys.argv[1]
 if not path:
@@ -630,7 +674,7 @@ PY
 }
 
 epic_all_tasks_done() {
-  python3 - "$1" <<'PY'
+  "$PYTHON_BIN" - "$1" <<'PY'
 import json, sys
 try:
     data = json.loads(sys.argv[1])
@@ -671,7 +715,7 @@ verify_receipt() {
   local kind="$2"
   local id="$3"
   [[ -f "$path" ]] || return 1
-  python3 - "$path" "$kind" "$id" <<'PY'
+  "$PYTHON_BIN" - "$path" "$kind" "$id" <<'PY'
 import json, sys
 path, kind, rid = sys.argv[1], sys.argv[2], sys.argv[3]
 try:
@@ -783,78 +827,90 @@ while (( iter <= MAX_ITERATIONS )); do
   fi
 
   export FLOW_RALPH="1"
-  AUTONOMOUS_RULES="$(cat <<'TXT'
-AUTONOMOUS MODE ACTIVE (FLOW_RALPH=1). You are running unattended. CRITICAL RULES:
+  claude_args=(-p)
+  # Always use stream-json for logs (TUI needs it), watch mode only controls terminal display
+  claude_args+=(--output-format stream-json)
+
+  # Autonomous mode system prompt - critical for preventing drift
+  claude_args+=(--append-system-prompt "AUTONOMOUS MODE ACTIVE (FLOW_RALPH=1). You are running unattended. CRITICAL RULES:
 1. EXECUTE COMMANDS EXACTLY as shown in prompts. Do not paraphrase or improvise.
 2. VERIFY OUTCOMES by running the verification commands (flowctl show, git status).
 3. NEVER CLAIM SUCCESS without proof. If flowctl done was not run, the task is NOT done.
 4. COPY TEMPLATES VERBATIM - receipt JSON must match exactly including all fields.
 5. USE SKILLS AS SPECIFIED - invoke /flow-next:impl-review, do not improvise review prompts.
-Violations break automation and leave the user with incomplete work. Be precise, not creative.
-TXT
-)"
-  prompt="${AUTONOMOUS_RULES}"$'\n\n'"${prompt}"
+Violations break automation and leave the user with incomplete work. Be precise, not creative.")
 
-  opencode_args=(run --format json --agent "${FLOW_RALPH_OPENCODE_AGENT:-ralph-runner}")
-  [[ -n "${FLOW_RALPH_OPENCODE_MODEL:-}" ]] && opencode_args+=(--model "$FLOW_RALPH_OPENCODE_MODEL")
-  [[ -n "${FLOW_RALPH_OPENCODE_VARIANT:-}" ]] && opencode_args+=(--variant "$FLOW_RALPH_OPENCODE_VARIANT")
-
-  prev_opencode_permission="${OPENCODE_PERMISSION-__unset__}"
-  if [[ "$YOLO" == "1" ]]; then
-    export OPENCODE_PERMISSION='{"*":"allow"}'
+  [[ -n "${MAX_TURNS:-}" ]] && claude_args+=(--max-turns "$MAX_TURNS")
+  [[ "$YOLO" == "1" ]] && claude_args+=(--dangerously-skip-permissions)
+  [[ -n "${FLOW_RALPH_CLAUDE_PLUGIN_DIR:-}" ]] && claude_args+=(--plugin-dir "$FLOW_RALPH_CLAUDE_PLUGIN_DIR")
+  [[ -n "${FLOW_RALPH_CLAUDE_MODEL:-}" ]] && claude_args+=(--model "$FLOW_RALPH_CLAUDE_MODEL")
+  [[ -n "${FLOW_RALPH_CLAUDE_SESSION_ID:-}" ]] && claude_args+=(--session-id "$FLOW_RALPH_CLAUDE_SESSION_ID")
+  [[ -n "${FLOW_RALPH_CLAUDE_PERMISSION_MODE:-}" ]] && claude_args+=(--permission-mode "$FLOW_RALPH_CLAUDE_PERMISSION_MODE")
+  [[ "${FLOW_RALPH_CLAUDE_NO_SESSION_PERSISTENCE:-}" == "1" ]] && claude_args+=(--no-session-persistence)
+  if [[ -n "${FLOW_RALPH_CLAUDE_DEBUG:-}" ]]; then
+    if [[ "${FLOW_RALPH_CLAUDE_DEBUG}" == "1" ]]; then
+      claude_args+=(--debug)
+    else
+      claude_args+=(--debug "$FLOW_RALPH_CLAUDE_DEBUG")
+    fi
   fi
+  [[ "${FLOW_RALPH_CLAUDE_VERBOSE:-}" == "1" ]] && claude_args+=(--verbose)
 
   ui_waiting
-  worker_out=""
+  claude_out=""
   set +e
+  [[ -n "${FLOW_RALPH_CLAUDE_PLUGIN_DIR:-}" ]] && claude_args+=(--plugin-dir "$FLOW_RALPH_CLAUDE_PLUGIN_DIR")
   if [[ "$WATCH_MODE" == "verbose" ]]; then
+    # Full output: stream through filter with --verbose to show text/thinking
+    [[ ! " ${claude_args[*]} " =~ " --verbose " ]] && claude_args+=(--verbose)
     echo ""
     if [[ -n "$TIMEOUT_CMD" ]]; then
-      $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py" --verbose
+      $TIMEOUT_CMD "$WORKER_TIMEOUT" "$CLAUDE_BIN" "${claude_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py" --verbose
     else
-      "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py" --verbose
+      "$CLAUDE_BIN" "${claude_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py" --verbose
     fi
-    worker_rc=${PIPESTATUS[0]}
-    worker_out="$(cat "$iter_log")"
+    claude_rc=${PIPESTATUS[0]}
+    claude_out="$(cat "$iter_log")"
   elif [[ "$WATCH_MODE" == "tools" ]]; then
+    # Filtered output: stream-json through watch-filter.py
+    # Add --verbose only if not already set (needed for tool visibility)
+    [[ ! " ${claude_args[*]} " =~ " --verbose " ]] && claude_args+=(--verbose)
     if [[ -n "$TIMEOUT_CMD" ]]; then
-      $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py"
+      $TIMEOUT_CMD "$WORKER_TIMEOUT" "$CLAUDE_BIN" "${claude_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py"
     else
-      "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py"
+      "$CLAUDE_BIN" "${claude_args[@]}" "$prompt" 2>&1 | tee "$iter_log" | "$SCRIPT_DIR/watch-filter.py"
     fi
-    worker_rc=${PIPESTATUS[0]}
-    worker_out="$(cat "$iter_log")"
+    claude_rc=${PIPESTATUS[0]}
+    # Log contains stream-json; verdict/promise extraction handled by fallback logic
+    claude_out="$(cat "$iter_log")"
   else
+    # Default: quiet mode (stream-json to log, no terminal display)
+    # --verbose required for stream-json with --print
+    [[ ! " ${claude_args[*]} " =~ " --verbose " ]] && claude_args+=(--verbose)
     if [[ -n "$TIMEOUT_CMD" ]]; then
-      $TIMEOUT_CMD "$WORKER_TIMEOUT" "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" > "$iter_log" 2>&1
+      $TIMEOUT_CMD "$WORKER_TIMEOUT" "$CLAUDE_BIN" "${claude_args[@]}" "$prompt" > "$iter_log" 2>&1
     else
-      "$OPENCODE_BIN" "${opencode_args[@]}" "$prompt" > "$iter_log" 2>&1
+      "$CLAUDE_BIN" "${claude_args[@]}" "$prompt" > "$iter_log" 2>&1
     fi
-    worker_rc=$?
-    worker_out="$(cat "$iter_log")"
+    claude_rc=$?
+    claude_out="$(cat "$iter_log")"
   fi
   set -e
 
-  if [[ "$prev_opencode_permission" == "__unset__" ]]; then
-    unset OPENCODE_PERMISSION
-  else
-    export OPENCODE_PERMISSION="$prev_opencode_permission"
-  fi
-
   # Handle timeout (exit code 124 from timeout command)
   worker_timeout=0
-  if [[ -n "$TIMEOUT_CMD" && "$worker_rc" -eq 124 ]]; then
+  if [[ -n "$TIMEOUT_CMD" && "$claude_rc" -eq 124 ]]; then
     echo "ralph: worker timed out after ${WORKER_TIMEOUT}s" >> "$iter_log"
     log "worker timeout after ${WORKER_TIMEOUT}s"
     worker_timeout=1
   fi
 
-  log "worker rc=$worker_rc log=$iter_log"
+  log "claude rc=$claude_rc log=$iter_log"
 
   force_retry=$worker_timeout
   plan_review_status=""
   task_status=""
-  if [[ "$status" == "plan" && ( "$PLAN_REVIEW" == "rp" || "$PLAN_REVIEW" == "opencode" ) ]]; then
+  if [[ "$status" == "plan" && ( "$PLAN_REVIEW" == "rp" || "$PLAN_REVIEW" == "codex" ) ]]; then
     if ! verify_receipt "$REVIEW_RECEIPT_PATH" "plan_review" "$epic_id"; then
       echo "ralph: missing plan review receipt; forcing retry" >> "$iter_log"
       log "missing plan receipt; forcing retry"
@@ -864,7 +920,7 @@ TXT
     epic_json="$("$FLOWCTL" show "$epic_id" --json 2>/dev/null || true)"
     plan_review_status="$(json_get plan_review_status "$epic_json")"
   fi
-  if [[ "$status" == "work" && ( "$WORK_REVIEW" == "rp" || "$WORK_REVIEW" == "opencode" ) ]]; then
+  if [[ "$status" == "work" && ( "$WORK_REVIEW" == "rp" || "$WORK_REVIEW" == "codex" ) ]]; then
     if ! verify_receipt "$REVIEW_RECEIPT_PATH" "impl_review" "$task_id"; then
       echo "ralph: missing impl review receipt; forcing retry" >> "$iter_log"
       log "missing impl receipt; forcing retry"
@@ -874,9 +930,9 @@ TXT
 
   # Extract verdict/promise for progress log (not displayed in UI)
   # Always parse stream-json since we always use that format now
-  worker_text="$(extract_text_from_run_json "$iter_log")"
-  verdict="$(printf '%s' "$worker_text" | extract_tag verdict)"
-  promise="$(printf '%s' "$worker_text" | extract_tag promise)"
+  claude_text="$(extract_text_from_stream_json "$iter_log")"
+  verdict="$(printf '%s' "$claude_text" | extract_tag verdict)"
+  promise="$(printf '%s' "$claude_text" | extract_tag promise)"
 
   # Fallback: derive verdict from flowctl status for logging
   if [[ -z "$verdict" && -n "$plan_review_status" ]]; then
@@ -901,20 +957,20 @@ TXT
   fi
   append_progress "$verdict" "$promise" "$plan_review_status" "$task_status"
 
-  if echo "$worker_text" | grep -q "<promise>COMPLETE</promise>"; then
+  if echo "$claude_text" | grep -q "<promise>COMPLETE</promise>"; then
     ui_complete
     write_completion_marker "DONE"
     exit 0
   fi
 
   exit_code=0
-  if echo "$worker_text" | grep -q "<promise>FAIL</promise>"; then
+  if echo "$claude_text" | grep -q "<promise>FAIL</promise>"; then
     exit_code=1
-  elif echo "$worker_text" | grep -q "<promise>RETRY</promise>"; then
+  elif echo "$claude_text" | grep -q "<promise>RETRY</promise>"; then
     exit_code=2
   elif [[ "$force_retry" == "1" ]]; then
     exit_code=2
-  elif [[ "$worker_rc" -ne 0 && "$task_status" != "done" && "$verdict" != "SHIP" ]]; then
+  elif [[ "$claude_rc" -ne 0 && "$task_status" != "done" && "$verdict" != "SHIP" ]]; then
     # Only fail on non-zero exit code if task didn't complete and verdict isn't SHIP
     # This prevents false failures from transient errors (telemetry, model fallback, etc.)
     exit_code=1
