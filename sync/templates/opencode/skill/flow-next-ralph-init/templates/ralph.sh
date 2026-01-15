@@ -521,6 +521,46 @@ append_progress() {
   } >> "$PROGRESS_FILE"
 }
 
+# Write completion marker to progress.txt (MUST match find_active_runs() detection in flowctl.py)
+write_completion_marker() {
+  local reason="${1:-DONE}"
+  {
+    echo ""
+    echo "completion_reason=$reason"
+    echo "promise=COMPLETE"  # CANONICAL - must match flowctl.py substring search
+  } >> "$PROGRESS_FILE"
+}
+
+# Check PAUSE/STOP sentinel files
+check_sentinels() {
+  local pause_file="$RUN_DIR/PAUSE"
+  local stop_file="$RUN_DIR/STOP"
+
+  # Check for stop first (exit immediately, keep file for audit)
+  if [[ -f "$stop_file" ]]; then
+    log "STOP sentinel detected, exiting gracefully"
+    ui_fail "STOP sentinel detected"
+    write_completion_marker "STOPPED"
+    exit 0
+  fi
+
+  # Check for pause (log once, wait in loop, re-check STOP while waiting)
+  if [[ -f "$pause_file" ]]; then
+    log "PAUSED - waiting for resume..."
+    while [[ -f "$pause_file" ]]; do
+      # Re-check STOP while paused so external stop works
+      if [[ -f "$stop_file" ]]; then
+        log "STOP sentinel detected while paused, exiting gracefully"
+        ui_fail "STOP sentinel detected"
+        write_completion_marker "STOPPED"
+        exit 0
+      fi
+      sleep 5
+    done
+    log "Resumed"
+  fi
+}
+
 init_branches_file() {
   if [[ -f "$BRANCHES_FILE" ]]; then return; fi
   local base_branch
@@ -681,6 +721,9 @@ iter=1
 while (( iter <= MAX_ITERATIONS )); do
   iter_log="$RUN_DIR/iter-$(printf '%03d' "$iter").log"
 
+  # Check for pause/stop at start of iteration (before work selection)
+  check_sentinels
+
   selector_args=("$FLOWCTL" next --json)
   [[ -n "$EPICS_FILE" ]] && selector_args+=(--epics-file "$EPICS_FILE")
   [[ "$REQUIRE_PLAN_REVIEW" == "1" ]] && selector_args+=(--require-plan-review)
@@ -700,7 +743,7 @@ while (( iter <= MAX_ITERATIONS )); do
     fi
     maybe_close_epics
     ui_complete
-    echo "<promise>COMPLETE</promise>"
+    write_completion_marker "NO_WORK"
     exit 0
   fi
 
@@ -860,7 +903,7 @@ TXT
 
   if echo "$worker_text" | grep -q "<promise>COMPLETE</promise>"; then
     ui_complete
-    echo "<promise>COMPLETE</promise>"
+    write_completion_marker "DONE"
     exit 0
   fi
 
@@ -880,6 +923,7 @@ TXT
   if [[ "$exit_code" -eq 1 ]]; then
     log "exit=fail"
     ui_fail "OpenCode returned FAIL promise"
+    write_completion_marker "FAILED"
     exit 1
   fi
 
@@ -902,10 +946,14 @@ TXT
     fi
   fi
 
+  # Check for pause/stop after OpenCode returns (before next iteration)
+  check_sentinels
+
   sleep 2
   iter=$((iter + 1))
 done
 
 ui_fail "Max iterations ($MAX_ITERATIONS) reached"
 echo "ralph: max iterations reached" >&2
+write_completion_marker "MAX_ITERATIONS"
 exit 1

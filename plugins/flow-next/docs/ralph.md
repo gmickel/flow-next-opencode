@@ -228,6 +228,49 @@ This builds a project-specific knowledge base of things reviewers catch that mod
 
 ---
 
+## Controlling Ralph
+
+External agents (CI, scripts, supervisors) can pause/resume/stop Ralph runs without killing processes.
+
+**CLI commands:**
+```bash
+# Check status
+flowctl status                    # Epic/task counts + active runs
+flowctl status --json             # JSON for automation
+
+# Control active run
+flowctl ralph pause               # Pause run (auto-detects if single)
+flowctl ralph resume              # Resume paused run
+flowctl ralph stop                # Request graceful stop
+flowctl ralph status              # Show run state
+
+# Specify run when multiple active
+flowctl ralph pause --run <id>
+```
+
+**Sentinel files (manual control):**
+```bash
+# Pause: touch PAUSE file in run directory
+touch scripts/ralph/runs/<run-id>/PAUSE
+# Resume: remove PAUSE file
+rm scripts/ralph/runs/<run-id>/PAUSE
+# Stop: touch STOP file (kept for audit)
+touch scripts/ralph/runs/<run-id>/STOP
+```
+
+Ralph checks sentinels at iteration boundaries (before work selection and after the model returns).
+
+**Task retry/rollback:**
+```bash
+# Reset completed/blocked task to todo
+flowctl task reset fn-1-abc.3
+
+# Reset + cascade to dependent tasks (same epic)
+flowctl task reset fn-1-abc.2 --cascade
+```
+
+---
+
 ## Configuration
 
 Edit `scripts/ralph/config.env`:

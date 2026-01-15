@@ -7,7 +7,7 @@ CLI for `.flow/` task tracking. Agents must use flowctl for all writes.
 ## Available Commands
 
 ```
-init, detect, epic, task, dep, show, epics, tasks, list, cat, ready, next, start, done, block, validate, config, memory, prep-chat, rp, codex
+init, detect, status, epic, task, dep, show, epics, tasks, list, cat, ready, next, start, done, block, validate, ralph, config, memory, prep-chat, rp, codex
 ```
 
 ## Multi-User Safety
@@ -71,6 +71,24 @@ Output:
 {"success": true, "exists": true, "valid": true, "path": "/repo/.flow"}
 ```
 
+### status
+
+Show `.flow/` state and active Ralph runs.
+
+```bash
+flowctl status [--json]
+```
+
+Example output:
+```
+Flow status:
+  Epics: open=2, done=1
+  Tasks: todo=3, in_progress=1, blocked=0, done=4
+
+Active Ralph runs:
+  ralph-20260115T000303Z-... (iteration 3, task fn-1-abc.2) [running]
+```
+
 ### epic create
 
 Create new epic.
@@ -108,6 +126,22 @@ Set epic branch_name.
 flowctl epic set-branch fn-1 --branch "fn-1-epic" [--json]
 ```
 
+### epic add-dep
+
+Add an epic-level dependency.
+
+```bash
+flowctl epic add-dep fn-2 fn-1 [--json]
+```
+
+### epic rm-dep
+
+Remove an epic-level dependency.
+
+```bash
+flowctl epic rm-dep fn-2 fn-1 [--json]
+```
+
 ### epic close
 
 Close epic (requires all tasks done).
@@ -143,6 +177,15 @@ Set task acceptance section.
 
 ```bash
 flowctl task set-acceptance fn-1.2 --file accept.md [--json]
+```
+
+### task reset
+
+Reset a completed/blocked task back to `todo`.
+
+```bash
+flowctl task reset fn-1.2 [--json]
+flowctl task reset fn-1.2 --cascade   # also reset dependent tasks (same epic)
 ```
 
 ### dep add
@@ -344,6 +387,21 @@ Checks:
 
 Exits with code 1 if validation fails (for CI use).
 
+### ralph
+
+Control active Ralph runs.
+
+```bash
+# Pause/resume/stop (auto-detect if single run)
+flowctl ralph pause
+flowctl ralph resume
+flowctl ralph stop
+flowctl ralph status
+
+# Specify run when multiple active
+flowctl ralph pause --run <run-id>
+```
+
 ### config
 
 Manage project configuration stored in `.flow/config.json`.
@@ -355,7 +413,7 @@ flowctl config get review.backend [--json]
 
 # Set a config value
 flowctl config set memory.enabled true [--json]
-flowctl config set review.backend codex [--json]  # rp, codex, or none
+flowctl config set review.backend opencode [--json]  # opencode, rp, or none
 
 # Toggle boolean config
 flowctl config toggle memory.enabled [--json]
@@ -366,7 +424,7 @@ flowctl config toggle memory.enabled [--json]
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `memory.enabled` | bool | `false` | Enable memory system |
-| `review.backend` | string | auto | Default review backend (`rp`, `codex`, `none`) |
+| `review.backend` | string | auto | Default review backend (`opencode`, `rp`, `none`) |
 
 Auto-detect priority: `FLOW_REVIEW_BACKEND` env → config → available CLI.
 
