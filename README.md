@@ -345,7 +345,7 @@ Config lives in `.flow/config.json` , separate from Ralph’s `scripts/ralph/con
 
 ## Ralph (Autonomous Mode)
 
-Ralph automation is available ( `/flow-next:ralph-init` ). Docs live at `plugins/flow-next/docs/ralph.md`.
+Ralph automation is available ( `/flow-next:ralph-init` ). Docs live at `plugins/flow-next/docs/ralph.md` (setup, `config.env`, `.opencode/opencode.json`, logs).
 
 ---
 

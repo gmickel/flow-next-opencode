@@ -26,7 +26,7 @@ This scaffolds `scripts/ralph/` with:
 - `config.env` — all settings
 - `runs/` — artifacts and logs
 
-### Step 1.5: Configure (edit config.env)
+### Step 1.5: Configure (edit config.env + opencode.json)
 
 Before running, set your review backends in `scripts/ralph/config.env`:
 
@@ -34,6 +34,22 @@ Before running, set your review backends in `scripts/ralph/config.env`:
 PLAN_REVIEW=opencode   # or: rp, none
 WORK_REVIEW=opencode   # or: rp, none
 ```
+
+Recommended config.env baseline:
+
+```bash
+PLAN_REVIEW=opencode
+WORK_REVIEW=opencode
+REQUIRE_PLAN_REVIEW=1
+BRANCH_MODE=new
+YOLO=1
+FLOW_RALPH_OPENCODE_MODEL=openai/gpt-5.2-codex
+FLOW_RALPH_OPENCODE_VARIANT=medium
+FLOW_RALPH_OPENCODE_AGENT=ralph-runner
+FLOW_RALPH_REVIEWER_AGENT=opencode-reviewer
+```
+
+Then ensure your OpenCode agents are configured in `.opencode/opencode.json` (see [OpenCode Integration](#opencode-integration)).
 
 See [Configuration](#configuration) for all options.
 
@@ -271,17 +287,19 @@ Note: OpenCode still enforces permissions in headless runs. `YOLO=1` (the defaul
 
 | Variable | Example | Description |
 |----------|---------|-------------|
-| `FLOW_RALPH_OPENCODE_MODEL` | `openai/gpt-5.2` | Override model for Ralph runs |
-| `FLOW_RALPH_OPENCODE_VARIANT` | `high` | Provider-specific variant/effort |
+| `FLOW_RALPH_OPENCODE_MODEL` | `openai/gpt-5.2-codex` | Override model for Ralph runs (runner) |
+| `FLOW_RALPH_OPENCODE_VARIANT` | `medium` | Provider-specific variant/effort |
 | `FLOW_RALPH_OPENCODE_AGENT` | `ralph-runner` | Subagent name to run |
 | `FLOW_RALPH_REVIEWER_AGENT` | `opencode-reviewer` | Reviewer subagent name |
 | `OPENCODE_BIN` | `/usr/local/bin/opencode` | Override OpenCode CLI path |
 
 **Default template (current):**
 ```
-FLOW_RALPH_OPENCODE_MODEL=openai/gpt-5.2
+FLOW_RALPH_OPENCODE_MODEL=openai/gpt-5.2-codex
 FLOW_RALPH_OPENCODE_VARIANT=medium
 ```
+
+Reviewer model + reasoning effort are configured in `.opencode/opencode.json` (see [OpenCode Integration](#opencode-integration)).
 
 ---
 
@@ -333,14 +351,50 @@ When `PLAN_REVIEW=opencode` or `WORK_REVIEW=opencode`, Ralph uses the OpenCode r
 - OpenCode CLI installed and available as `opencode`
 - Reviewer agent configured in `.opencode/opencode.json` (default: `opencode-reviewer`)
 
-**Model:** Configured in `.opencode/opencode.json` (default `openai/gpt-5.2` with `reasoningEffort=high`). For Ralph runs you can override with:
+### Agent configuration (opencode.json)
 
-```bash
-FLOW_RALPH_OPENCODE_MODEL=openai/gpt-5.2
-FLOW_RALPH_OPENCODE_VARIANT=high
+Add or update these agents in `.opencode/opencode.json`:
+
+```json
+{
+  "agent": {
+    "ralph-runner": {
+      "description": "Autonomous Ralph runner (tool-first, no chit-chat)",
+      "mode": "primary",
+      "model": "openai/gpt-5.2-codex",
+      "reasoningEffort": "medium",
+      "prompt": "You are an autonomous workflow executor. Always use tools to perform actions. Never respond with status-only text. Do not ask questions. If you cannot proceed or a required tool fails, output exactly: <promise>RETRY</promise> and stop."
+    },
+    "opencode-reviewer": {
+      "description": "Carmack-level reviewer for plans and implementations",
+      "model": "openai/gpt-5.2",
+      "reasoningEffort": "high",
+      "prompt": "You are a strict reviewer. Focus on correctness, completeness, feasibility, risks, and testability. Provide issues with severity and concrete fixes. End with exactly one verdict tag: <verdict>SHIP</verdict> or <verdict>NEEDS_WORK</verdict> or <verdict>MAJOR_RETHINK</verdict>."
+    }
+  }
+}
 ```
 
-**Session continuity:** OpenCode reviews are stateless per iteration; each re-review is a fresh subagent run. Receipts must be written each time.
+You can swap models or reasoning effort here for both the runner and reviewer.
+
+**Model override (runner):** For Ralph runs you can override the runner model via `config.env`:
+
+```bash
+FLOW_RALPH_OPENCODE_MODEL=openai/gpt-5.2-codex
+FLOW_RALPH_OPENCODE_VARIANT=medium
+```
+
+**Session continuity:** Re-reviews reuse the same OpenCode subagent session. The review skills capture the `session_id` and pass it back on re-review.
+
+### OpenCode logs
+
+OpenCode logs are stored at:
+
+```
+~/.local/share/opencode/log/
+```
+
+Use these when debugging long waits or retries.
 
 ---
 
