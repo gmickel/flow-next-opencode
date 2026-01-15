@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2
+
+- flowctl stdin support + task set-spec + checkpoints
+- Plan/interview workflows use heredocs + set-spec
+- Smoke/CI updates for new flowctl behavior
+
 ## 0.2.1
 
 - Add browser skill (standalone)

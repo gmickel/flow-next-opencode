@@ -125,6 +125,9 @@ Run backend detection from SKILL.md above. Then branch:
 EPIC_ID="${1:-}"
 RECEIPT_PATH="${REVIEW_RECEIPT_PATH:-/tmp/plan-review-receipt.json}"
 
+# Save checkpoint before review (recovery point if context compacts)
+$FLOWCTL checkpoint save --epic "$EPIC_ID" --json
+
 $FLOWCTL codex plan-review "$EPIC_ID" --receipt "$RECEIPT_PATH"
 # Output includes VERDICT=SHIP|NEEDS_WORK|MAJOR_RETHINK
 ```
@@ -137,6 +140,9 @@ On NEEDS_WORK: fix plan via `$FLOWCTL epic set-plan`, then re-run (receipt enabl
 # Step 1: Get plan content
 $FLOWCTL show <id> --json
 $FLOWCTL cat <id>
+
+# Save checkpoint before review (recovery point if context compacts)
+$FLOWCTL checkpoint save --epic <id> --json
 
 # Step 2: Atomic setup
 eval "$($FLOWCTL rp setup-review --repo-root "$REPO_ROOT" --summary "Review plan for <EPIC_ID>: <summary>")"
@@ -158,10 +164,24 @@ $FLOWCTL epic set-plan-review-status <EPIC_ID> --status ship --json
 If verdict is NEEDS_WORK, loop internally until SHIP:
 
 1. **Parse issues** from reviewer feedback
-2. **Fix plan** via `$FLOWCTL epic set-plan <EPIC_ID> --file /tmp/updated-plan.md`
+2. **Fix plan** (stdin preferred, temp file if content has single quotes):
+   ```bash
+   # Preferred: stdin heredoc
+   $FLOWCTL epic set-plan <EPIC_ID> --file - --json <<'EOF'
+   <updated plan content>
+   EOF
+
+   # Or temp file
+   $FLOWCTL epic set-plan <EPIC_ID> --file /tmp/updated-plan.md --json
+   ```
 3. **Re-review**:
    - **Codex**: Re-run `flowctl codex plan-review` (receipt enables context)
    - **RP**: `$FLOWCTL rp chat-send --window "$W" --tab "$T" --message-file /tmp/re-review.md` (NO `--new-chat`)
 4. **Repeat** until `<verdict>SHIP</verdict>`
+
+**Recovery**: If context compaction occurred during review, restore from checkpoint:
+```bash
+$FLOWCTL checkpoint restore --epic <EPIC_ID> --json
+```
 
 **CRITICAL**: For RP, re-reviews must stay in the SAME chat so reviewer has context. Only use `--new-chat` on the FIRST review.

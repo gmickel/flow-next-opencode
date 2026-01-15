@@ -59,13 +59,15 @@ $FLOWCTL ready --epic fn-1 --json
 # Create task under existing epic
 $FLOWCTL task create --epic fn-1 --title "Fix bug X" --json
 
-# Set task description (from file)
+# Set task description + acceptance (combined, fewer writes)
 echo "Description here" > /tmp/desc.md
-$FLOWCTL task set-description fn-1.2 --file /tmp/desc.md --json
-
-# Set acceptance criteria (from file)
 echo "- [ ] Criterion 1" > /tmp/accept.md
-$FLOWCTL task set-acceptance fn-1.2 --file /tmp/accept.md --json
+$FLOWCTL task set-spec fn-1.2 --description /tmp/desc.md --acceptance /tmp/accept.md --json
+
+# Or use stdin for description only:
+$FLOWCTL task set-description fn-1.2 --file - --json <<'EOF'
+Description here
+EOF
 
 # Start working on task
 $FLOWCTL start fn-1.2 --json
@@ -98,7 +100,7 @@ $FLOWCTL validate --all --json
    $FLOWCTL task create --epic fn-N --title "Short title" --json
    ```
 
-3. Add description:
+3. Add description + acceptance (combined):
    ```bash
    cat > /tmp/desc.md << 'EOF'
    **Bug/Feature:** Brief description
@@ -107,16 +109,11 @@ $FLOWCTL validate --all --json
    - Point 1
    - Point 2
    EOF
-   $FLOWCTL task set-description fn-N.M --file /tmp/desc.md --json
-   ```
-
-4. Add acceptance:
-   ```bash
    cat > /tmp/accept.md << 'EOF'
    - [ ] Criterion 1
    - [ ] Criterion 2
    EOF
-   $FLOWCTL task set-acceptance fn-N.M --file /tmp/accept.md --json
+   $FLOWCTL task set-spec fn-N.M --description /tmp/desc.md --acceptance /tmp/accept.md --json
    ```
 
 ### "What tasks are there?"

@@ -45,30 +45,18 @@ $FLOWCTL config get memory.enabled --json
 **Based on user's choice in SKILL.md setup:**
 
 **If user chose context-scout (RepoPrompt)**:
-Run these subagents in parallel using the **batch** tool with **task** calls:
-- context-scout (<request>) - uses RepoPrompt builder for AI-powered file discovery
-- practice-scout (<request>)
-- docs-scout (<request>)
-- memory-scout (<request>) — **only if memory.enabled is true**
+Run these subagents in parallel using the Task tool:
+- Task flow-next:context-scout(<request>) - uses RepoPrompt builder for AI-powered file discovery
+- Task flow-next:practice-scout(<request>)
+- Task flow-next:docs-scout(<request>)
+- Task flow-next:memory-scout(<request>) - **only if memory.enabled is true**
 
 **If user chose repo-scout (default/faster)** OR rp-cli unavailable:
-Run these subagents in parallel using the **batch** tool with **task** calls:
-- repo-scout (<request>) - uses standard Grep/Glob/Read
-- practice-scout (<request>)
-- docs-scout (<request>)
-- memory-scout (<request>) — **only if memory.enabled is true**
-
-Example batch payload:
-```json
-{
-  "tool_calls": [
-    {"tool": "task", "parameters": {"description": "Context scout", "prompt": "<request>", "subagent_type": "context-scout"}},
-    {"tool": "task", "parameters": {"description": "Practice scout", "prompt": "<request>", "subagent_type": "practice-scout"}},
-    {"tool": "task", "parameters": {"description": "Docs scout", "prompt": "<request>", "subagent_type": "docs-scout"}}
-  ]
-}
-```
-Max 10 tool calls per batch. Split if more. Do not include external/MCP tools in batch.
+Run these subagents in parallel using the Task tool:
+- Task flow-next:repo-scout(<request>) - uses standard Grep/Glob/Read
+- Task flow-next:practice-scout(<request>)
+- Task flow-next:docs-scout(<request>)
+- Task flow-next:memory-scout(<request>) - **only if memory.enabled is true**
 
 Must capture:
 - File paths + line refs
@@ -113,18 +101,25 @@ Default to short unless complexity demands more.
 
 ## Step 4: Write to .flow
 
+**Efficiency note**: Use stdin (`--file -`) with heredocs to avoid temp files. Use `task set-spec` to set description + acceptance in one call.
+
 **Route A - Input was an existing Flow ID**:
 
 1. If epic ID (fn-N):
-   - Write a temp file with the updated plan spec
-   - `$FLOWCTL epic set-plan <id> --file <temp-md> --json`
+   ```bash
+   # Use stdin heredoc (no temp file needed)
+   $FLOWCTL epic set-plan <id> --file - --json <<'EOF'
+   <plan content here>
+   EOF
+   ```
    - Create/update child tasks as needed
 
 2. If task ID (fn-N.M):
-   - Write temp file for description
-   - `$FLOWCTL task set-description <id> --file <temp-md> --json`
-   - Write temp file for acceptance
-   - `$FLOWCTL task set-acceptance <id> --file <temp-md> --json`
+   ```bash
+   # Combined set-spec: description + acceptance in one call
+   # Write to temp files only if content has single quotes
+   $FLOWCTL task set-spec <id> --description /tmp/desc.md --acceptance /tmp/acc.md --json
+   ```
 
 **Route B - Input was text (new idea)**:
 
@@ -141,10 +136,24 @@ Default to short unless complexity demands more.
    ```
    - If user specified a branch, use that instead.
 
-3. Write epic spec:
-   - Create a temp file with the full plan/spec content
-   - Include: Overview, Scope, Approach, Quick commands (REQUIRED - at least one smoke test command), Acceptance, References
-   - `$FLOWCTL epic set-plan <epic-id> --file <temp-md> --json`
+3. Write epic spec (use stdin heredoc):
+   ```bash
+   # Include: Overview, Scope, Approach, Quick commands (REQUIRED), Acceptance, References
+   $FLOWCTL epic set-plan <epic-id> --file - --json <<'EOF'
+   # Epic Title
+
+   ## Overview
+   ...
+
+   ## Quick commands
+   ```bash
+   # At least one smoke test command
+   ```
+
+   ## Acceptance
+   ...
+   EOF
+   ```
 
 4. Create child tasks:
    ```bash
@@ -152,10 +161,13 @@ Default to short unless complexity demands more.
    $FLOWCTL task create --epic <epic-id> --title "<Task title>" --json
    ```
 
-5. Write task specs:
-   - For each task, write description and acceptance to temp files
-   - `$FLOWCTL task set-description <task-id> --file <temp-md> --json`
-   - `$FLOWCTL task set-acceptance <task-id> --file <temp-md> --json`
+5. Write task specs (use combined set-spec):
+   ```bash
+   # For each task - single call sets both sections
+   # Write description and acceptance to temp files, then:
+   $FLOWCTL task set-spec <task-id> --description /tmp/desc.md --acceptance /tmp/acc.md --json
+   ```
+   This reduces 4 atomic writes per task to 2.
 
 6. Add dependencies:
    ```bash

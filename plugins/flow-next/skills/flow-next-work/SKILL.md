@@ -176,7 +176,7 @@ If user chose review:
 
 ## Guardrails
 
-- Don't start without asking branch question (unless FLOW_RALPH=1)
+- Don't start without asking branch question
 - Don't start without plan/epic
 - Don't skip tests
 - Don't leave tasks half-done

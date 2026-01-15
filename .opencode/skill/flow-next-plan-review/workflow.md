@@ -2,7 +2,7 @@
 
 ## Philosophy
 
-The reviewer model only sees provided context. RepoPrompt's Builder discovers context you'd miss (rp backend). OpenCode uses the provided plan content and criteria (opencode backend).
+The reviewer model only sees selected files. RepoPrompt's Builder discovers context you'd miss (rp backend). OpenCode uses the provided plan content and criteria (opencode backend).
 
 ---
 
@@ -47,10 +47,17 @@ echo "Review backend: $BACKEND"
 
 Use when `BACKEND="opencode"`.
 
+### Step 0: Save Checkpoint
+
+**Before review** (protects against context compaction):
+```bash
+EPIC_ID="${1:-}"
+$FLOWCTL checkpoint save --epic "$EPIC_ID" --json
+```
+
 ### Step 1: Gather plan content
 
 ```bash
-EPIC_ID="${1:-}"
 RECEIPT_PATH="${REVIEW_RECEIPT_PATH:-/tmp/plan-review-receipt.json}"
 
 PLAN_SUMMARY="$($FLOWCTL show "$EPIC_ID" --json)"
@@ -100,9 +107,14 @@ EOF
 
 If `VERDICT=NEEDS_WORK`:
 1. Parse issues from output
-2. Fix plan via `$FLOWCTL epic set-plan`
+2. Fix plan via `$FLOWCTL epic set-plan` (stdin preferred)
 3. Re-run Step 3 (same backend, same `session_id`)
 4. Repeat until SHIP
+
+**Recovery**: If context compaction occurred, restore before re-review:
+```bash
+$FLOWCTL checkpoint restore --epic "$EPIC_ID" --json
+```
 
 ---
 
@@ -138,6 +150,12 @@ $FLOWCTL cat <id>
 ```
 
 Save output for inclusion in review prompt. Compose a 1-2 sentence summary for the setup-review command.
+
+**Save checkpoint** (protects against context compaction during review):
+```bash
+$FLOWCTL checkpoint save --epic <id> --json
+```
+This creates `.flow/.checkpoint-<id>.json`. If compaction occurs, restore with `$FLOWCTL checkpoint restore --epic <id>`.
 
 ---
 
@@ -251,12 +269,23 @@ fi
 If verdict is NEEDS_WORK:
 
 1. **Parse issues** - Extract ALL issues by severity (Critical → Major → Minor)
-2. **Fix the plan** - Address each issue. Write updated plan to temp file.
+2. **Fix the plan** - Address each issue.
 3. **Update plan in flowctl** (MANDATORY before re-review):
    ```bash
+   # Option A: stdin heredoc (preferred, no temp file)
+   $FLOWCTL epic set-plan <EPIC_ID> --file - --json <<'EOF'
+   <updated plan content>
+   EOF
+
+   # Option B: temp file (if content has single quotes)
    $FLOWCTL epic set-plan <EPIC_ID> --file /tmp/updated-plan.md --json
    ```
    **If you skip this step and re-review with same content, reviewer will return NEEDS_WORK again.**
+
+   **Recovery**: If context compaction occurred, restore from checkpoint first:
+   ```bash
+   $FLOWCTL checkpoint restore --epic <EPIC_ID> --json
+   ```
 
 4. **Re-review with fix summary** (only AFTER step 3):
 

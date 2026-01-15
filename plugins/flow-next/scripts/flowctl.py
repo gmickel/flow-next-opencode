@@ -333,6 +333,19 @@ def read_text_or_exit(path: Path, what: str, use_json: bool = True) -> str:
         error_exit(f"{what} unreadable: {path} ({e})", use_json=use_json)
 
 
+def read_file_or_stdin(file_arg: str, what: str, use_json: bool = True) -> str:
+    """Read from file path or stdin if file_arg is '-'.
+
+    Supports heredoc usage: flowctl ... --file - <<'EOF'
+    """
+    if file_arg == "-":
+        try:
+            return sys.stdin.read()
+        except Exception as e:
+            error_exit(f"Failed to read {what} from stdin: {e}", use_json=use_json)
+    return read_text_or_exit(Path(file_arg), what, use_json=use_json)
+
+
 def generate_epic_suffix(length: int = 3) -> str:
     """Generate random alphanumeric suffix for epic IDs (a-z0-9)."""
     alphabet = string.ascii_lowercase + string.digits
@@ -695,17 +708,21 @@ def run_codex_exec(
 
     If session_id provided, tries to resume. Falls back to new session if resume fails.
     Model: FLOW_CODEX_MODEL env > parameter > default (gpt-5.2 + high reasoning).
+
+    Note: Prompt is passed via stdin (using '-') to avoid Windows command-line
+    length limits (~8191 chars) and special character escaping issues. (GH-35)
     """
     codex = require_codex()
     # Model priority: env > parameter > default (gpt-5.2 + high reasoning = GPT 5.2 High)
     effective_model = os.environ.get("FLOW_CODEX_MODEL") or model or "gpt-5.2"
 
     if session_id:
-        # Try resume first (model already set in original session)
-        cmd = [codex, "exec", "resume", session_id, prompt]
+        # Try resume first - use stdin for prompt (model already set in original session)
+        cmd = [codex, "exec", "resume", session_id, "-"]
         try:
             result = subprocess.run(
                 cmd,
+                input=prompt,
                 capture_output=True,
                 text=True,
                 check=True,
@@ -720,6 +737,7 @@ def run_codex_exec(
 
     # New session with model + high reasoning effort
     # --skip-git-repo-check: safe with read-only sandbox, allows reviews from /tmp etc (GH-33)
+    # Use '-' to read prompt from stdin - avoids Windows CLI length limits (GH-35)
     cmd = [
         codex,
         "exec",
@@ -731,11 +749,12 @@ def run_codex_exec(
         sandbox,
         "--skip-git-repo-check",
         "--json",
-        prompt,
+        "-",
     ]
     try:
         result = subprocess.run(
             cmd,
+            input=prompt,
             capture_output=True,
             text=True,
             check=True,
@@ -1372,6 +1391,9 @@ def cmd_status(args: argparse.Namespace) -> None:
 
         if tasks_dir.exists():
             for task_file in tasks_dir.glob("fn-*.json"):
+                # Skip non-task files (must have . before .json)
+                if "." not in task_file.stem:
+                    continue
                 try:
                     task_data = load_json(task_file)
                     status = task_data.get("status", "todo")
@@ -1380,49 +1402,60 @@ def cmd_status(args: argparse.Namespace) -> None:
                 except Exception:
                     pass
 
+    # Get active runs
     active_runs = find_active_runs()
 
     if args.json:
         json_output(
             {
+                "success": True,
                 "flow_exists": flow_exists,
                 "epics": epic_counts,
                 "tasks": task_counts,
-                "active_runs": active_runs,
+                "runs": [
+                    {
+                        "id": r["id"],
+                        "iteration": r["iteration"],
+                        "current_epic": r["current_epic"],
+                        "current_task": r["current_task"],
+                        "paused": r["paused"],
+                        "stopped": r["stopped"],
+                    }
+                    for r in active_runs
+                ],
             }
         )
     else:
-        if flow_exists:
-            print("Flow status:")
-            print(f"  Epics: open={epic_counts['open']}, done={epic_counts['done']}")
-            print(
-                "  Tasks: todo={todo}, in_progress={in_progress}, blocked={blocked}, done={done}".format(
-                    **task_counts
-                )
-            )
+        if not flow_exists:
+            print(".flow/ not initialized")
         else:
-            print(".flow/ does not exist")
+            total_epics = sum(epic_counts.values())
+            total_tasks = sum(task_counts.values())
+            print(f"Epics: {epic_counts['open']} open, {epic_counts['done']} done")
+            print(
+                f"Tasks: {task_counts['todo']} todo, {task_counts['in_progress']} in_progress, "
+                f"{task_counts['done']} done, {task_counts['blocked']} blocked"
+            )
 
+        print()
         if active_runs:
-            print("\nActive Ralph runs:")
-            for run in active_runs:
+            print("Active runs:")
+            for r in active_runs:
                 state = []
-                if run.get("paused"):
+                if r["paused"]:
                     state.append("PAUSED")
-                if run.get("stopped"):
+                if r["stopped"]:
                     state.append("STOPPED")
                 state_str = f" [{', '.join(state)}]" if state else ""
                 task_info = ""
-                if run.get("current_task"):
-                    task_info = f", task {run['current_task']}"
-                elif run.get("current_epic"):
-                    task_info = f", epic {run['current_epic']}"
-                iter_info = (
-                    f"iteration {run['iteration']}" if run.get("iteration") else "starting"
-                )
-                print(f"  {run['id']} ({iter_info}{task_info}){state_str}")
+                if r["current_task"]:
+                    task_info = f", working on {r['current_task']}"
+                elif r["current_epic"]:
+                    task_info = f", epic {r['current_epic']}"
+                iter_info = f"iteration {r['iteration']}" if r["iteration"] else "starting"
+                print(f"  {r['id']} ({iter_info}{task_info}){state_str}")
         else:
-            print("\nNo active runs")
+            print("No active runs")
 
 
 def cmd_ralph_pause(args: argparse.Namespace) -> None:
@@ -2387,8 +2420,8 @@ def cmd_epic_set_plan(args: argparse.Namespace) -> None:
     if not epic_path.exists():
         error_exit(f"Epic {args.id} not found", use_json=args.json)
 
-    # Read content from file
-    content = read_text_or_exit(Path(args.file), "Input file", use_json=args.json)
+    # Read content from file or stdin
+    content = read_file_or_stdin(args.file, "Input file", use_json=args.json)
 
     # Write spec
     spec_path = flow_dir / SPECS_DIR / f"{args.id}.md"
@@ -2623,6 +2656,85 @@ def cmd_task_set_acceptance(args: argparse.Namespace) -> None:
     _task_set_section(args.id, "## Acceptance", args.file, args.json)
 
 
+def cmd_task_set_spec(args: argparse.Namespace) -> None:
+    """Set task description and/or acceptance in one call.
+
+    Reduces tool calls: instead of separate set-description + set-acceptance,
+    both can be set atomically with a single JSON timestamp update.
+    """
+    if not ensure_flow_exists():
+        error_exit(
+            ".flow/ does not exist. Run 'flowctl init' first.", use_json=args.json
+        )
+
+    task_id = args.id
+    if not is_task_id(task_id):
+        error_exit(
+            f"Invalid task ID: {task_id}. Expected format: fn-N.M or fn-N-xxx.M",
+            use_json=args.json,
+        )
+
+    # Need at least one of description or acceptance
+    if not args.description and not args.acceptance:
+        error_exit(
+            "At least one of --description or --acceptance required",
+            use_json=args.json,
+        )
+
+    flow_dir = get_flow_dir()
+    task_json_path = flow_dir / TASKS_DIR / f"{task_id}.json"
+    task_spec_path = flow_dir / TASKS_DIR / f"{task_id}.md"
+
+    # Verify task exists
+    if not task_json_path.exists():
+        error_exit(f"Task {task_id} not found", use_json=args.json)
+
+    # Load task JSON first (fail early)
+    task_data = load_json_or_exit(task_json_path, f"Task {task_id}", use_json=args.json)
+
+    # Read current spec
+    current_spec = read_text_or_exit(
+        task_spec_path, f"Task {task_id} spec", use_json=args.json
+    )
+
+    updated_spec = current_spec
+    sections_updated = []
+
+    # Apply description if provided
+    if args.description:
+        desc_content = read_file_or_stdin(args.description, "Description file", use_json=args.json)
+        try:
+            updated_spec = patch_task_section(updated_spec, "## Description", desc_content)
+            sections_updated.append("## Description")
+        except ValueError as e:
+            error_exit(str(e), use_json=args.json)
+
+    # Apply acceptance if provided
+    if args.acceptance:
+        acc_content = read_file_or_stdin(args.acceptance, "Acceptance file", use_json=args.json)
+        try:
+            updated_spec = patch_task_section(updated_spec, "## Acceptance", acc_content)
+            sections_updated.append("## Acceptance")
+        except ValueError as e:
+            error_exit(str(e), use_json=args.json)
+
+    # Single atomic write for spec, single for JSON
+    atomic_write(task_spec_path, updated_spec)
+    task_data["updated_at"] = now_iso()
+    atomic_write_json(task_json_path, task_data)
+
+    if args.json:
+        json_output(
+            {
+                "id": task_id,
+                "sections": sections_updated,
+                "message": f"Task {task_id} updated: {', '.join(sections_updated)}",
+            }
+        )
+    else:
+        print(f"Task {task_id} updated: {', '.join(sections_updated)}")
+
+
 def cmd_task_reset(args: argparse.Namespace) -> None:
     """Reset task status to todo."""
     if not ensure_flow_exists():
@@ -2750,8 +2862,8 @@ def _task_set_section(
     if not task_json_path.exists():
         error_exit(f"Task {task_id} not found", use_json=use_json)
 
-    # Read new content
-    new_content = read_text_or_exit(Path(file_path), "Input file", use_json=use_json)
+    # Read new content from file or stdin
+    new_content = read_file_or_stdin(file_path, "Input file", use_json=use_json)
 
     # Load task JSON first (fail early before any writes)
     task_data = load_json_or_exit(task_json_path, f"Task {task_id}", use_json=use_json)
@@ -4108,6 +4220,198 @@ def cmd_codex_plan_review(args: argparse.Namespace) -> None:
         print(f"\nVERDICT={verdict or 'UNKNOWN'}")
 
 
+# --- Checkpoint commands ---
+
+
+def cmd_checkpoint_save(args: argparse.Namespace) -> None:
+    """Save full epic + tasks state to checkpoint file.
+
+    Creates .flow/.checkpoint-fn-N.json with complete state snapshot.
+    Use before plan-review or other long operations to enable recovery
+    if context compaction occurs.
+    """
+    if not ensure_flow_exists():
+        error_exit(
+            ".flow/ does not exist. Run 'flowctl init' first.", use_json=args.json
+        )
+
+    epic_id = args.epic
+    if not is_epic_id(epic_id):
+        error_exit(
+            f"Invalid epic ID: {epic_id}. Expected format: fn-N or fn-N-xxx",
+            use_json=args.json,
+        )
+
+    flow_dir = get_flow_dir()
+    epic_path = flow_dir / EPICS_DIR / f"{epic_id}.json"
+    spec_path = flow_dir / SPECS_DIR / f"{epic_id}.md"
+
+    if not epic_path.exists():
+        error_exit(f"Epic {epic_id} not found", use_json=args.json)
+
+    # Load epic data
+    epic_data = load_json_or_exit(epic_path, f"Epic {epic_id}", use_json=args.json)
+
+    # Load epic spec
+    epic_spec = ""
+    if spec_path.exists():
+        epic_spec = spec_path.read_text(encoding="utf-8")
+
+    # Load all tasks for this epic
+    tasks_dir = flow_dir / TASKS_DIR
+    tasks = []
+    if tasks_dir.exists():
+        for task_file in sorted(tasks_dir.glob(f"{epic_id}.*.json")):
+            task_data = load_json(task_file)
+            task_spec_path = tasks_dir / f"{task_file.stem}.md"
+            task_spec = ""
+            if task_spec_path.exists():
+                task_spec = task_spec_path.read_text(encoding="utf-8")
+            tasks.append({
+                "id": task_file.stem,
+                "data": task_data,
+                "spec": task_spec,
+            })
+
+    # Build checkpoint
+    checkpoint = {
+        "schema_version": 1,
+        "created_at": now_iso(),
+        "epic_id": epic_id,
+        "epic": {
+            "data": epic_data,
+            "spec": epic_spec,
+        },
+        "tasks": tasks,
+    }
+
+    # Write checkpoint
+    checkpoint_path = flow_dir / f".checkpoint-{epic_id}.json"
+    atomic_write_json(checkpoint_path, checkpoint)
+
+    if args.json:
+        json_output({
+            "epic_id": epic_id,
+            "checkpoint_path": str(checkpoint_path),
+            "task_count": len(tasks),
+            "message": f"Checkpoint saved: {checkpoint_path}",
+        })
+    else:
+        print(f"Checkpoint saved: {checkpoint_path} ({len(tasks)} tasks)")
+
+
+def cmd_checkpoint_restore(args: argparse.Namespace) -> None:
+    """Restore epic + tasks state from checkpoint file.
+
+    Reads .flow/.checkpoint-fn-N.json and overwrites current state.
+    Use to recover after context compaction or to rollback changes.
+    """
+    if not ensure_flow_exists():
+        error_exit(
+            ".flow/ does not exist. Run 'flowctl init' first.", use_json=args.json
+        )
+
+    epic_id = args.epic
+    if not is_epic_id(epic_id):
+        error_exit(
+            f"Invalid epic ID: {epic_id}. Expected format: fn-N or fn-N-xxx",
+            use_json=args.json,
+        )
+
+    flow_dir = get_flow_dir()
+    checkpoint_path = flow_dir / f".checkpoint-{epic_id}.json"
+
+    if not checkpoint_path.exists():
+        error_exit(f"No checkpoint found for {epic_id}", use_json=args.json)
+
+    # Load checkpoint
+    checkpoint = load_json_or_exit(
+        checkpoint_path, f"Checkpoint {epic_id}", use_json=args.json
+    )
+
+    # Validate checkpoint structure
+    if "epic" not in checkpoint or "tasks" not in checkpoint:
+        error_exit("Invalid checkpoint format", use_json=args.json)
+
+    # Restore epic
+    epic_path = flow_dir / EPICS_DIR / f"{epic_id}.json"
+    spec_path = flow_dir / SPECS_DIR / f"{epic_id}.md"
+
+    epic_data = checkpoint["epic"]["data"]
+    epic_data["updated_at"] = now_iso()
+    atomic_write_json(epic_path, epic_data)
+
+    if checkpoint["epic"]["spec"]:
+        atomic_write(spec_path, checkpoint["epic"]["spec"])
+
+    # Restore tasks
+    tasks_dir = flow_dir / TASKS_DIR
+    restored_tasks = []
+    for task in checkpoint["tasks"]:
+        task_id = task["id"]
+        task_json_path = tasks_dir / f"{task_id}.json"
+        task_spec_path = tasks_dir / f"{task_id}.md"
+
+        task_data = task["data"]
+        task_data["updated_at"] = now_iso()
+        atomic_write_json(task_json_path, task_data)
+
+        if task["spec"]:
+            atomic_write(task_spec_path, task["spec"])
+        restored_tasks.append(task_id)
+
+    if args.json:
+        json_output({
+            "epic_id": epic_id,
+            "checkpoint_created_at": checkpoint.get("created_at"),
+            "tasks_restored": restored_tasks,
+            "message": f"Restored {epic_id} from checkpoint ({len(restored_tasks)} tasks)",
+        })
+    else:
+        print(f"Restored {epic_id} from checkpoint ({len(restored_tasks)} tasks)")
+        print(f"Checkpoint was created at: {checkpoint.get('created_at', 'unknown')}")
+
+
+def cmd_checkpoint_delete(args: argparse.Namespace) -> None:
+    """Delete checkpoint file for an epic."""
+    if not ensure_flow_exists():
+        error_exit(
+            ".flow/ does not exist. Run 'flowctl init' first.", use_json=args.json
+        )
+
+    epic_id = args.epic
+    if not is_epic_id(epic_id):
+        error_exit(
+            f"Invalid epic ID: {epic_id}. Expected format: fn-N or fn-N-xxx",
+            use_json=args.json,
+        )
+
+    flow_dir = get_flow_dir()
+    checkpoint_path = flow_dir / f".checkpoint-{epic_id}.json"
+
+    if not checkpoint_path.exists():
+        if args.json:
+            json_output({
+                "epic_id": epic_id,
+                "deleted": False,
+                "message": f"No checkpoint found for {epic_id}",
+            })
+        else:
+            print(f"No checkpoint found for {epic_id}")
+        return
+
+    checkpoint_path.unlink()
+
+    if args.json:
+        json_output({
+            "epic_id": epic_id,
+            "deleted": True,
+            "message": f"Deleted checkpoint for {epic_id}",
+        })
+    else:
+        print(f"Deleted checkpoint for {epic_id}")
+
+
 def cmd_validate(args: argparse.Namespace) -> None:
     """Validate epic structure or all epics."""
     if not ensure_flow_exists():
@@ -4254,7 +4558,7 @@ def main() -> None:
     p_detect.set_defaults(func=cmd_detect)
 
     # status
-    p_status = subparsers.add_parser("status", help="Show .flow state + Ralph runs")
+    p_status = subparsers.add_parser("status", help="Show .flow state and active runs")
     p_status.add_argument("--json", action="store_true", help="JSON output")
     p_status.set_defaults(func=cmd_status)
 
@@ -4317,7 +4621,7 @@ def main() -> None:
 
     p_epic_set_plan = epic_sub.add_parser("set-plan", help="Set epic spec from file")
     p_epic_set_plan.add_argument("id", help="Epic ID (fn-N)")
-    p_epic_set_plan.add_argument("--file", required=True, help="Markdown file")
+    p_epic_set_plan.add_argument("--file", required=True, help="Markdown file (use '-' for stdin)")
     p_epic_set_plan.add_argument("--json", action="store_true", help="JSON output")
     p_epic_set_plan.set_defaults(func=cmd_epic_set_plan)
 
@@ -4376,15 +4680,28 @@ def main() -> None:
 
     p_task_desc = task_sub.add_parser("set-description", help="Set task description")
     p_task_desc.add_argument("id", help="Task ID (fn-N.M)")
-    p_task_desc.add_argument("--file", required=True, help="Markdown file")
+    p_task_desc.add_argument("--file", required=True, help="Markdown file (use '-' for stdin)")
     p_task_desc.add_argument("--json", action="store_true", help="JSON output")
     p_task_desc.set_defaults(func=cmd_task_set_description)
 
     p_task_acc = task_sub.add_parser("set-acceptance", help="Set task acceptance")
     p_task_acc.add_argument("id", help="Task ID (fn-N.M)")
-    p_task_acc.add_argument("--file", required=True, help="Markdown file")
+    p_task_acc.add_argument("--file", required=True, help="Markdown file (use '-' for stdin)")
     p_task_acc.add_argument("--json", action="store_true", help="JSON output")
     p_task_acc.set_defaults(func=cmd_task_set_acceptance)
+
+    p_task_set_spec = task_sub.add_parser(
+        "set-spec", help="Set description and/or acceptance in one call"
+    )
+    p_task_set_spec.add_argument("id", help="Task ID (fn-N.M)")
+    p_task_set_spec.add_argument(
+        "--description", help="Description file (use '-' for stdin)"
+    )
+    p_task_set_spec.add_argument(
+        "--acceptance", help="Acceptance file (use '-' for stdin)"
+    )
+    p_task_set_spec.add_argument("--json", action="store_true", help="JSON output")
+    p_task_set_spec.set_defaults(func=cmd_task_set_spec)
 
     p_task_reset = task_sub.add_parser("reset", help="Reset task to todo")
     p_task_reset.add_argument("task_id", help="Task ID (fn-N.M)")
@@ -4491,6 +4808,31 @@ def main() -> None:
     )
     p_validate.add_argument("--json", action="store_true", help="JSON output")
     p_validate.set_defaults(func=cmd_validate)
+
+    # checkpoint
+    p_checkpoint = subparsers.add_parser("checkpoint", help="Checkpoint commands")
+    checkpoint_sub = p_checkpoint.add_subparsers(dest="checkpoint_cmd", required=True)
+
+    p_checkpoint_save = checkpoint_sub.add_parser(
+        "save", help="Save epic state to checkpoint"
+    )
+    p_checkpoint_save.add_argument("--epic", required=True, help="Epic ID (fn-N)")
+    p_checkpoint_save.add_argument("--json", action="store_true", help="JSON output")
+    p_checkpoint_save.set_defaults(func=cmd_checkpoint_save)
+
+    p_checkpoint_restore = checkpoint_sub.add_parser(
+        "restore", help="Restore epic state from checkpoint"
+    )
+    p_checkpoint_restore.add_argument("--epic", required=True, help="Epic ID (fn-N)")
+    p_checkpoint_restore.add_argument("--json", action="store_true", help="JSON output")
+    p_checkpoint_restore.set_defaults(func=cmd_checkpoint_restore)
+
+    p_checkpoint_delete = checkpoint_sub.add_parser(
+        "delete", help="Delete checkpoint for epic"
+    )
+    p_checkpoint_delete.add_argument("--epic", required=True, help="Epic ID (fn-N)")
+    p_checkpoint_delete.add_argument("--json", action="store_true", help="JSON output")
+    p_checkpoint_delete.set_defaults(func=cmd_checkpoint_delete)
 
     # prep-chat (for rp-cli chat_send JSON escaping)
     p_prep = subparsers.add_parser(

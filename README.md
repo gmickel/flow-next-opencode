@@ -443,8 +443,7 @@ flowctl epic set-plan-review-status fn-1 --status ship
 flowctl epic close fn-1
 
 flowctl task create --epic fn-1 --title "..." --deps fn-1.2,fn-1.3 --priority 10
-flowctl task set-description fn-1.1 --file desc.md
-flowctl task set-acceptance fn-1.1 --file accept.md
+flowctl task set-spec fn-1.1 --description desc.md --acceptance accept.md
 
 flowctl dep add fn-1.3 fn-1.2
 
@@ -453,6 +452,8 @@ flowctl next
 flowctl start fn-1.1
 flowctl done fn-1.1 --summary-file s.md --evidence-json e.json
 flowctl block fn-1.2 --reason-file r.md
+flowctl checkpoint save --epic fn-1
+flowctl checkpoint restore --epic fn-1
 
 flowctl show fn-1 --json
 flowctl cat fn-1

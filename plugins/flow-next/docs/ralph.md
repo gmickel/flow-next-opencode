@@ -14,19 +14,13 @@ Run the init skill from OpenCode:
 /flow-next:ralph-init
 ```
 
-Or run setup from terminal without entering OpenCode:
-
-```bash
-opencode run "/flow-next:ralph-init"
-```
-
 This scaffolds `scripts/ralph/` with:
 - `ralph.sh` — main loop
 - `ralph_once.sh` — single iteration (for testing)
 - `config.env` — all settings
 - `runs/` — artifacts and logs
 
-### Step 1.5: Configure (edit config.env + opencode.json)
+### Step 1.5: Configure (edit config.env)
 
 Before running, set your review backends in `scripts/ralph/config.env`:
 
@@ -34,22 +28,6 @@ Before running, set your review backends in `scripts/ralph/config.env`:
 PLAN_REVIEW=opencode   # or: rp, none
 WORK_REVIEW=opencode   # or: rp, none
 ```
-
-Recommended config.env baseline:
-
-```bash
-PLAN_REVIEW=opencode
-WORK_REVIEW=opencode
-REQUIRE_PLAN_REVIEW=1
-BRANCH_MODE=new
-YOLO=1
-FLOW_RALPH_OPENCODE_MODEL=openai/gpt-5.2-codex
-FLOW_RALPH_OPENCODE_VARIANT=medium
-FLOW_RALPH_OPENCODE_AGENT=ralph-runner
-FLOW_RALPH_REVIEWER_AGENT=opencode-reviewer
-```
-
-Then ensure your OpenCode agents are configured in `.opencode/opencode.json` (see [OpenCode Integration](#opencode-integration)).
 
 See [Configuration](#configuration) for all options.
 
@@ -67,7 +45,7 @@ Runs ONE iteration then exits. Observe the output before committing to a full ru
 scripts/ralph/ralph.sh
 ```
 
-Ralph spawns OpenCode runs via `opencode run`, loops until done, and applies review gates.
+Ralph spawns OpenCode sessions via `opencode run`, loops until done, and applies review gates.
 
 **Watch mode** - see what's happening in real-time:
 ```bash
@@ -175,11 +153,11 @@ Ralph enforces quality through three mechanisms:
 Reviews use a second model to verify code. Two models catch what one misses.
 
 **Review backends:**
-- `opencode` — OpenCode reviewer subagent (default)
-- `rp` — [RepoPrompt](https://repoprompt.com/?atp=KJbuL4) (macOS only, GUI-based)
+- `rp` — [RepoPrompt](https://repoprompt.com/?atp=KJbuL4) (macOS only, GUI-based) **← recommended**
+- `opencode` — OpenCode reviewer subagent (cross-platform, terminal-based)
 - `none` — skip reviews (not recommended for production)
 
-**We recommend RepoPrompt** when available. Its Builder provides full file context with intelligent selection. OpenCode reviews are zero-install and use your configured model and effort.
+**We recommend RepoPrompt** when available. Its Builder provides full file context with intelligent selection, while OpenCode uses the provided plan/code context. Both use the same Carmack-level review criteria.
 
 - Plan reviews verify architecture and edge cases before coding starts
 - Impl reviews verify the implementation meets spec after each task
@@ -189,7 +167,7 @@ Reviews use a second model to verify code. Two models catch what one misses.
 Every review must produce a receipt JSON proving it ran:
 
 ```json
-{"type":"impl_review","id":"fn-1.1","mode":"opencode","timestamp":"2026-01-09T..."}
+{"type":"impl_review","id":"fn-1.1","mode":"rp","timestamp":"2026-01-09T..."}
 ```
 
 No receipt = no progress. Ralph retries until receipt exists.
@@ -228,49 +206,6 @@ This builds a project-specific knowledge base of things reviewers catch that mod
 
 ---
 
-## Controlling Ralph
-
-External agents (CI, scripts, supervisors) can pause/resume/stop Ralph runs without killing processes.
-
-**CLI commands:**
-```bash
-# Check status
-flowctl status                    # Epic/task counts + active runs
-flowctl status --json             # JSON for automation
-
-# Control active run
-flowctl ralph pause               # Pause run (auto-detects if single)
-flowctl ralph resume              # Resume paused run
-flowctl ralph stop                # Request graceful stop
-flowctl ralph status              # Show run state
-
-# Specify run when multiple active
-flowctl ralph pause --run <id>
-```
-
-**Sentinel files (manual control):**
-```bash
-# Pause: touch PAUSE file in run directory
-touch scripts/ralph/runs/<run-id>/PAUSE
-# Resume: remove PAUSE file
-rm scripts/ralph/runs/<run-id>/PAUSE
-# Stop: touch STOP file (kept for audit)
-touch scripts/ralph/runs/<run-id>/STOP
-```
-
-Ralph checks sentinels at iteration boundaries (before work selection and after the model returns).
-
-**Task retry/rollback:**
-```bash
-# Reset completed/blocked task to todo
-flowctl task reset fn-1-abc.3
-
-# Reset + cascade to dependent tasks (same epic)
-flowctl task reset fn-1-abc.2 --cascade
-```
-
----
-
 ## Configuration
 
 Edit `scripts/ralph/config.env`:
@@ -279,12 +214,12 @@ Edit `scripts/ralph/config.env`:
 
 | Variable | Values | Description |
 |----------|--------|-------------|
-| `PLAN_REVIEW` | `opencode`, `rp`, `none` | How to review plans |
-| `WORK_REVIEW` | `opencode`, `rp`, `none` | How to review implementations |
+| `PLAN_REVIEW` | `rp`, `opencode`, `none` | How to review plans |
+| `WORK_REVIEW` | `rp`, `opencode`, `none` | How to review implementations |
 | `REQUIRE_PLAN_REVIEW` | `1`, `0` | Block work until plan review passes |
 
-- `opencode` — OpenCode reviewer subagent (default)
 - `rp` — RepoPrompt (macOS, requires GUI)
+- `opencode` — OpenCode reviewer subagent
 - `none` — skip reviews
 
 ### Branch Settings
@@ -304,6 +239,7 @@ With `BRANCH_MODE=new`, all epics work on the same run branch. Commits are prefi
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MAX_ITERATIONS` | `25` | Total loop iterations |
+| `MAX_TURNS` | (empty) | OpenCode turns per iteration (empty = unlimited) |
 | `MAX_ATTEMPTS_PER_TASK` | `5` | Retries before auto-blocking task |
 
 ### Scope
@@ -318,31 +254,13 @@ With `BRANCH_MODE=new`, all epics work on the same run branch. Commits are prefi
 |----------|---------|--------|
 | `YOLO` | `1` | Sets `OPENCODE_PERMISSION='{\"*\":\"allow\"}'` for unattended runs |
 
-Note: OpenCode still enforces permissions in headless runs. `YOLO=1` (the default) is required for truly unattended loops. Set `YOLO=0` for interactive testing.
+Note: `YOLO=1` (default) is required for fully unattended runs. Set `YOLO=0` for interactive testing.
 
 ### Display
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `RALPH_UI` | `1` | Colored/emoji output (0 = plain) |
-
-### OpenCode settings
-
-| Variable | Example | Description |
-|----------|---------|-------------|
-| `FLOW_RALPH_OPENCODE_MODEL` | `openai/gpt-5.2-codex` | Override model for Ralph runs (runner) |
-| `FLOW_RALPH_OPENCODE_VARIANT` | `medium` | Provider-specific variant/effort |
-| `FLOW_RALPH_OPENCODE_AGENT` | `ralph-runner` | Subagent name to run |
-| `FLOW_RALPH_REVIEWER_AGENT` | `opencode-reviewer` | Reviewer subagent name |
-| `OPENCODE_BIN` | `/usr/local/bin/opencode` | Override OpenCode CLI path |
-
-**Default template (current):**
-```
-FLOW_RALPH_OPENCODE_MODEL=openai/gpt-5.2-codex
-FLOW_RALPH_OPENCODE_VARIANT=medium
-```
-
-Reviewer model + reasoning effort are configured in `.opencode/opencode.json` (see [OpenCode Integration](#opencode-integration)).
 
 ---
 
@@ -383,61 +301,20 @@ Never call `rp-cli` directly in Ralph mode.
 
 ## OpenCode Integration
 
-When `PLAN_REVIEW=opencode` or `WORK_REVIEW=opencode`, Ralph uses the OpenCode reviewer subagent via:
-
-```bash
-/flow-next:plan-review <fn-N> --review=opencode
-/flow-next:impl-review <fn-N.M> --review=opencode
-```
+When `PLAN_REVIEW=opencode` or `WORK_REVIEW=opencode`, Ralph uses the OpenCode reviewer subagent.
 
 **Requirements:**
-- OpenCode CLI installed and available as `opencode`
-- Reviewer agent configured in `.opencode/opencode.json` (default: `opencode-reviewer`)
+- OpenCode installed and authenticated
+- `opencode.json` includes `opencode-reviewer` agent (model + reasoning settings)
 
-### Agent configuration (opencode.json)
+**Model:** Controlled via `.opencode/opencode.json` (e.g., `openai/gpt-5.2` with `reasoningEffort: high`).
 
-Add or update these agents in `.opencode/opencode.json`:
+**Advantages over rp:**
+- Cross-platform (Windows, Linux, macOS)
+- Terminal-based (no GUI required)
+- Session continuity via OpenCode subagent chat
 
-```json
-{
-  "agent": {
-    "ralph-runner": {
-      "description": "Autonomous Ralph runner (tool-first, no chit-chat)",
-      "mode": "primary",
-      "model": "openai/gpt-5.2-codex",
-      "reasoningEffort": "medium",
-      "prompt": "You are an autonomous workflow executor. Always use tools to perform actions. Never respond with status-only text. Do not ask questions. If you cannot proceed or a required tool fails, output exactly: <promise>RETRY</promise> and stop."
-    },
-    "opencode-reviewer": {
-      "description": "Carmack-level reviewer for plans and implementations",
-      "model": "openai/gpt-5.2",
-      "reasoningEffort": "high",
-      "prompt": "You are a strict reviewer. Focus on correctness, completeness, feasibility, risks, and testability. Provide issues with severity and concrete fixes. End with exactly one verdict tag: <verdict>SHIP</verdict> or <verdict>NEEDS_WORK</verdict> or <verdict>MAJOR_RETHINK</verdict>."
-    }
-  }
-}
-```
-
-You can swap models or reasoning effort here for both the runner and reviewer.
-
-**Model override (runner):** For Ralph runs you can override the runner model via `config.env`:
-
-```bash
-FLOW_RALPH_OPENCODE_MODEL=openai/gpt-5.2-codex
-FLOW_RALPH_OPENCODE_VARIANT=medium
-```
-
-**Session continuity:** Re-reviews reuse the same OpenCode subagent session. The review skills capture the `session_id` and pass it back on re-review.
-
-### OpenCode logs
-
-OpenCode logs are stored at:
-
-```
-~/.local/share/opencode/log/
-```
-
-Use these when debugging long waits or retries.
+**Session continuity:** Re-reviews reuse the same subagent session via `session_id`.
 
 ---
 
@@ -472,11 +349,7 @@ Alternatives:
 
 ### OpenCode not found
 
-Ensure OpenCode CLI is installed and available in PATH:
-
-```bash
-opencode --help
-```
+Ensure OpenCode is installed and authenticated.
 
 Or switch to RepoPrompt: set `PLAN_REVIEW=rp` and `WORK_REVIEW=rp`.
 
@@ -491,6 +364,20 @@ scripts/ralph/ralph_once.sh
 ```
 
 Runs one loop iteration, then exits. Good for verifying setup.
+
+### Sandbox mode (recommended for unattended runs)
+
+Run Ralph inside Docker sandbox for extra isolation:
+
+```bash
+# From your project directory
+docker sandbox run opencode "scripts/ralph/ralph.sh"
+
+# Or specify workspace explicitly
+docker sandbox run -w ~/my-project opencode "scripts/ralph/ralph.sh"
+```
+
+See Docker sandbox docs for details.
 
 ### Watch mode
 
@@ -512,10 +399,9 @@ Appends detailed logs to `scripts/ralph/runs/<run>/ralph.log`.
 ### Debug environment variables
 
 ```bash
-FLOW_RALPH_OPENCODE_MODEL=openai/gpt-5.2
-FLOW_RALPH_OPENCODE_VARIANT=high
-FLOW_RALPH_OPENCODE_AGENT=ralph-runner
-OPENCODE_BIN=/path/to/opencode
+FLOW_RALPH_OPENCODE_MODEL=openai/gpt-5.2-codex  # Force model
+FLOW_RALPH_CLAUDE_DEBUG=hooks                     # Debug hooks
+FLOW_RALPH_CLAUDE_PERMISSION_MODE=bypassPermissions
 ```
 
 ---
@@ -532,23 +418,23 @@ Ralph includes plugin hooks that enforce workflow rules deterministically.
 |------|-----|
 | No `--json` on chat-send | Preserves review text output (rp) |
 | No `--new-chat` on re-reviews | First review creates chat, subsequent stay in same (rp) |
-| Require `flowctl done` summary+evidence | Enforces audit trail for impl tasks |
-| Receipt must exist before completion | Blocks progress without review proof |
-| Track OpenCode review verdicts | Validates review completed successfully |
-| Block direct `rp-cli` | Enforce wrapper usage for consistency |
+| Receipt must exist before Stop | Blocks agent from stopping without writing receipt |
+| Required flags on setup/select-add | Ensures proper window/tab targeting (rp) |
+| Track opencode review verdicts | Validates opencode review completed successfully |
 
 ### Hook location
 
 ```
-.opencode/plugin/
-  flow-next-ralph-guard.ts  # OpenCode hook logic
+plugins/flow-next/
+  hooks/hooks.json              # Hook config
+  scripts/hooks/ralph-guard.py  # Guard logic
 ```
 
 ### Disabling hooks
 
-Temporarily: unset `FLOW_RALPH`.
+Temporarily: unset `FLOW_RALPH` or remove `hooks/hooks.json`.
 
-Permanently: delete `.opencode/plugin/flow-next-ralph-guard.ts`.
+Permanently: delete `hooks/` directory and remove `"hooks"` from `plugin.json`.
 
 ---
 

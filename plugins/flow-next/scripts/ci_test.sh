@@ -523,7 +523,7 @@ promise=RETRY
 completion_reason=DONE
 promise=COMPLETE
 PROGRESS
-ACTIVE_COUNT="$(flowctl status --json | "$PYTHON_BIN" -c 'import json,sys; d=json.load(sys.stdin); print(len(d.get("active_runs",[])))')"
+ACTIVE_COUNT="$(flowctl status --json | "$PYTHON_BIN" -c 'import json,sys; d=json.load(sys.stdin); print(len(d.get("runs",[])))')"
 [[ "$ACTIVE_COUNT" == "0" ]] && pass "completed run excluded from active" || fail "completed run still active: count=$ACTIVE_COUNT"
 rm -rf scripts/ralph/runs/completed-test
 
