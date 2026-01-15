@@ -77,3 +77,4 @@ git log --oneline --all -- "*/auth*" | head -5  # history of similar features
 - Flag code that MUST be reused (don't reinvent)
 - Note any CLAUDE.md rules that apply
 - Skip deep analysis - that's for other agents
+- Do NOT ask the user questions. Make a best-guess and proceed.
