@@ -25,19 +25,19 @@ FLOWCTL="$PLUGIN_ROOT/scripts/flowctl"
 
 Detect input type in this order (first match wins):
 
-1. **Flow task ID** `fn-N.M` (e.g., fn-1.3)
-2. **Flow epic ID** `fn-N` (e.g., fn-1)
+1. **Flow task ID** `fn-N.M` or `fn-N-xxx.M` (e.g., fn-1.3, fn-1-abc.2)
+2. **Flow epic ID** `fn-N` or `fn-N-xxx` (e.g., fn-1, fn-1-abc)
 3. **Spec file** `.md` path that exists on disk
 4. **Idea text** everything else
 
 ---
 
-**Flow task ID (fn-N.M)**:
+**Flow task ID (fn-N.M or fn-N-xxx.M)**:
 - Read task: `$FLOWCTL show <id> --json`
 - Read spec: `$FLOWCTL cat <id>`
 - Get epic from task data for context: `$FLOWCTL show <epic-id> --json && $FLOWCTL cat <epic-id>`
 
-**Flow epic ID (fn-N)**:
+**Flow epic ID (fn-N or fn-N-xxx)**:
 - Read epic: `$FLOWCTL show <id> --json`
 - Read spec: `$FLOWCTL cat <id>`
 - Get first ready task: `$FLOWCTL ready --epic <id> --json`

@@ -69,7 +69,7 @@ fi;
 # Check configured backend (priority: env > config)
 CONFIGURED_BACKEND="${FLOW_REVIEW_BACKEND:-}";
 if [[ -z "$CONFIGURED_BACKEND" ]]; then
-  CONFIGURED_BACKEND="$($FLOWCTL config get review.backend 2>/dev/null | jq -r '.value // empty')";
+  CONFIGURED_BACKEND="$($FLOWCTL config get review.backend --json 2>/dev/null | jq -r '.value // empty')";
 fi
 ```
 
@@ -154,7 +154,7 @@ Wait for response. Parse naturally — user may reply terse or ramble via voice.
 
 ## Workflow
 
-After setup questions answered, read [phases.md](phases.md) and execute each phase in order.
+After setup questions answered, read `.opencode/skill/flow-next-work/phases.md` and execute each phase in order.
 If user chose review:
 - Option 2a: run `/flow-next:impl-review` after Phase 6, fix issues until it passes
 - Option 2b: run `/flow-next:impl-review` with export mode after Phase 6

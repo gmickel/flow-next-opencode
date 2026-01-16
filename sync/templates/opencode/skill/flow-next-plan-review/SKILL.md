@@ -52,7 +52,7 @@ fi;
 # Get configured backend
 BACKEND="${FLOW_REVIEW_BACKEND:-}";
 if [[ -z "$BACKEND" ]]; then
-  BACKEND="$($FLOWCTL config get review.backend 2>/dev/null | jq -r '.value // empty')";
+  BACKEND="$($FLOWCTL config get review.backend --json 2>/dev/null | jq -r '.value // empty')";
 fi
 ```
 
