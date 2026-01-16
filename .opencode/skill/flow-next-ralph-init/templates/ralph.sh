@@ -735,6 +735,10 @@ if data.get("type") != kind:
     sys.exit(1)
 if data.get("id") != rid:
     sys.exit(1)
+if kind in ("plan_review", "impl_review"):
+    verdict = data.get("verdict")
+    if verdict not in ("SHIP", "NEEDS_WORK", "MAJOR_RETHINK"):
+        sys.exit(1)
 sys.exit(0)
 PY
 }
