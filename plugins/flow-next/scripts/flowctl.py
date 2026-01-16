@@ -805,7 +805,7 @@ def parse_codex_verdict(output: str) -> Optional[str]:
 
 
 def run_opencode_review(
-    prompt: str,
+    prompt_file: str,
     files: Optional[list[str]] = None,
     title: Optional[str] = None,
     timeout: int = 600,
@@ -818,7 +818,8 @@ def run_opencode_review(
     if files:
         for f in files:
             cmd += ["--file", f]
-    cmd.append(prompt)
+    cmd += ["--file", prompt_file]
+    cmd.append("Review attached prompt and patch. End with a single <verdict> tag.")
     try:
         result = subprocess.run(
             cmd,
@@ -4407,9 +4408,11 @@ def cmd_opencode_impl_review(args: argparse.Namespace) -> None:
         base_branch=base_branch,
         focus=focus,
     )
+    prompt_path = f"/tmp/impl-review-{base_branch}..HEAD.prompt.md"
+    Path(prompt_path).write_text(prompt, encoding="utf-8")
 
     title = f"Impl Review: {task_id or 'branch'}"
-    output = run_opencode_review(prompt, files=[patch_path], title=title)
+    output = run_opencode_review(prompt_path, files=[patch_path], title=title)
     verdict = parse_codex_verdict(output)
 
     review_id = task_id if task_id else "branch"
@@ -4469,9 +4472,11 @@ def cmd_opencode_plan_review(args: argparse.Namespace) -> None:
         epic_id=epic_id,
         focus=focus,
     )
+    prompt_path = f"/tmp/plan-review-{epic_id}.prompt.md"
+    Path(prompt_path).write_text(prompt, encoding="utf-8")
 
     title = f"Plan Review: {epic_id}"
-    output = run_opencode_review(prompt, title=title)
+    output = run_opencode_review(prompt_path, title=title)
     verdict = parse_codex_verdict(output)
 
     receipt_path = args.receipt if hasattr(args, "receipt") and args.receipt else None
