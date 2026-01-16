@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3
+
+- Canonicalize `.opencode/` (remove legacy plugin/sync paths)
+- Docs moved to `docs/` with updated links
+- Ralph receipts now require verdicts
+
 ## 0.2.1
 
 - Add browser skill (standalone)
