@@ -17,27 +17,27 @@
 
 ```bash
 ROOT="$(git rev-parse --show-toplevel)"
-PLUGIN_ROOT="$ROOT/plugins/flow-next"
-FLOWCTL="$PLUGIN_ROOT/scripts/flowctl"
+OPENCODE_DIR="$ROOT/.opencode"
+FLOWCTL="$OPENCODE_DIR/bin/flowctl"
 ```
 
 ## Phase 1: Resolve Input
 
 Detect input type in this order (first match wins):
 
-1. **Flow task ID** `fn-N.M` (e.g., fn-1.3)
-2. **Flow epic ID** `fn-N` (e.g., fn-1)
+1. **Flow task ID** `fn-N.M` or `fn-N-xxx.M` (e.g., fn-1.3, fn-1-abc.2)
+2. **Flow epic ID** `fn-N` or `fn-N-xxx` (e.g., fn-1, fn-1-abc)
 3. **Spec file** `.md` path that exists on disk
 4. **Idea text** everything else
 
 ---
 
-**Flow task ID (fn-N.M)**:
+**Flow task ID (fn-N.M or fn-N-xxx.M)**:
 - Read task: `$FLOWCTL show <id> --json`
 - Read spec: `$FLOWCTL cat <id>`
 - Get epic from task data for context: `$FLOWCTL show <epic-id> --json && $FLOWCTL cat <epic-id>`
 
-**Flow epic ID (fn-N)**:
+**Flow epic ID (fn-N or fn-N-xxx)**:
 - Read epic: `$FLOWCTL show <id> --json`
 - Read spec: `$FLOWCTL cat <id>`
 - Get first ready task: `$FLOWCTL ready --epic <id> --json`
@@ -170,6 +170,9 @@ After step 5, run the smoke command from epic spec's "Quick commands" section.
    ```bash
    $FLOWCTL done <task-id> --summary-file <summary.md> --evidence-json <evidence.json> --json
    ```
+
+   **FORBIDDEN**: `flowctl task edit` (no such command).  
+   If you need to update task text, edit the markdown file directly and use `flowctl done` with summary/evidence.
 
    Verify the task is actually marked done:
    ```bash

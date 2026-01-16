@@ -34,15 +34,14 @@ if [[ -z "${PROJECT:-}" ]]; then
 fi
 
 install_project() {
-  mkdir -p "$PROJECT/.opencode" "$PROJECT/plugins"
+  mkdir -p "$PROJECT/.opencode"
 
-  rsync -a "$ROOT/.opencode/command" "$ROOT/.opencode/skill" "$ROOT/.opencode/agent" "$ROOT/.opencode/plugin" "$PROJECT/.opencode/"
+  # Copy everything except opencode.json (preserve project-local config)
+  rsync -a --exclude "opencode.json" "$ROOT/.opencode/" "$PROJECT/.opencode/"
 
   if [[ ! -f "$PROJECT/.opencode/opencode.json" && -f "$ROOT/.opencode/opencode.json" ]]; then
     rsync -a "$ROOT/.opencode/opencode.json" "$PROJECT/.opencode/"
   fi
-
-  rsync -a "$ROOT/plugins/flow-next" "$PROJECT/plugins/"
 }
 
 install_project

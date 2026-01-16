@@ -15,8 +15,8 @@ Conduct a John Carmack-level review of epic plans.
 **CRITICAL: flowctl is BUNDLED — NOT installed globally.** `which flowctl` will fail (expected). Always use:
 ```bash
 ROOT="$(git rev-parse --show-toplevel)"
-PLUGIN_ROOT="$ROOT/plugins/flow-next"
-FLOWCTL="$PLUGIN_ROOT/scripts/flowctl"
+OPENCODE_DIR="$ROOT/.opencode"
+FLOWCTL="$OPENCODE_DIR/bin/flowctl"
 ```
 
 ## Backend Selection
@@ -42,17 +42,17 @@ If found, use that backend and skip all other detection.
 
 ```bash
 # Check available backends
-HAVE_RP=0
+HAVE_RP=0;
 if command -v rp-cli >/dev/null 2>&1; then
-  HAVE_RP=1
+  HAVE_RP=1;
 elif [[ -x /opt/homebrew/bin/rp-cli || -x /usr/local/bin/rp-cli ]]; then
-  HAVE_RP=1
-fi
+  HAVE_RP=1;
+fi;
 
 # Get configured backend
-BACKEND="${FLOW_REVIEW_BACKEND:-}"
+BACKEND="${FLOW_REVIEW_BACKEND:-}";
 if [[ -z "$BACKEND" ]]; then
-  BACKEND="$($FLOWCTL config get review.backend 2>/dev/null | jq -r '.value // empty')"
+  BACKEND="$($FLOWCTL config get review.backend --json 2>/dev/null | jq -r '.value // empty')";
 fi
 ```
 
@@ -97,11 +97,10 @@ fi
 5. **Re-reviews MUST stay in SAME chat** - omit `--new-chat` after first review
 
 **For opencode backend:**
-1. Use the task tool with `subagent_type: opencode-reviewer`
-2. Provide full plan content (`flowctl show` + `flowctl cat`) and focus areas
-3. Parse verdict from `<verdict>...` tag
-4. If `REVIEW_RECEIPT_PATH` set: write receipt JSON with `mode: "opencode"`
-5. **Re-reviews must reuse the same task session**: capture `session_id` from `<task_metadata>` and pass it back via `session_id` on subsequent task tool calls
+1. Use the **task tool** with subagent_type `opencode-reviewer`
+2. Reviewer gathers context via tools (`flowctl show/cat`)
+3. Parse verdict from reviewer output
+4. Extract `session_id` from `<task_metadata>` and reuse it for re-reviews
 
 **For all backends:**
 - If `REVIEW_RECEIPT_PATH` set: write receipt after review (any verdict)
@@ -123,8 +122,8 @@ Format: `<flow-epic-id> [focus areas]`
 
 ```bash
 ROOT="$(git rev-parse --show-toplevel)"
-PLUGIN_ROOT="$ROOT/plugins/flow-next"
-FLOWCTL="$PLUGIN_ROOT/scripts/flowctl"
+OPENCODE_DIR="$ROOT/.opencode"
+FLOWCTL="$OPENCODE_DIR/bin/flowctl"
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ```
 
@@ -134,37 +133,18 @@ Run backend detection from SKILL.md above. Then branch:
 
 ### OpenCode Backend
 
-```bash
-EPIC_ID="${1:-}"
-RECEIPT_PATH="${REVIEW_RECEIPT_PATH:-/tmp/plan-review-receipt.json}"
+Use the task tool with subagent_type `opencode-reviewer`.
 
-# Gather plan content
-PLAN_SUMMARY="$($FLOWCTL show "$EPIC_ID" --json)"
-PLAN_SPEC="$($FLOWCTL cat "$EPIC_ID")"
-```
+Prompt must require:
+- `flowctl show <EPIC_ID> --json`
+- `flowctl cat <EPIC_ID>`
+- No questions, no code changes, no TodoWrite
+- End with `<verdict>SHIP</verdict>` or `<verdict>NEEDS_WORK</verdict>` or `<verdict>MAJOR_RETHINK</verdict>`
 
-Build a review prompt with:
-- Plan summary + spec
-- Focus areas from arguments
-- Review criteria (completeness, feasibility, clarity, architecture, risks, scope, testability)
-- Required verdict tag
-
-Run reviewer subagent using the task tool:
-- subagent_type: `opencode-reviewer`
-- prompt: `<review prompt>`
-
-Parse verdict from reviewer response (`<verdict>SHIP|NEEDS_WORK|MAJOR_RETHINK</verdict>`).
+Parse verdict from the subagent response.
+Extract `session_id` from `<task_metadata>` and reuse for re-review.
 
 On NEEDS_WORK: fix plan via `$FLOWCTL epic set-plan`, then re-run review (same backend).
-
-Write receipt if `REVIEW_RECEIPT_PATH` set:
-```bash
-mkdir -p "$(dirname "$RECEIPT_PATH")"
-ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-cat > "$RECEIPT_PATH" <<EOF
-{"type":"plan_review","id":"$EPIC_ID","mode":"opencode","verdict":"<VERDICT>","timestamp":"$ts"}
-EOF
-```
 
 ### RepoPrompt Backend
 

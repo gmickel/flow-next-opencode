@@ -1,10 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Windows / Git Bash hardening (GH-35)
+# ─────────────────────────────────────────────────────────────────────────────
+UNAME_S="$(uname -s 2>/dev/null || echo "")"
+IS_WINDOWS=0
+case "$UNAME_S" in
+  MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=1 ;;
+esac
+
+# Python detection: prefer python3, fallback to python (common on Windows)
+pick_python() {
+  if [[ -n "${PYTHON_BIN:-}" ]]; then
+    command -v "$PYTHON_BIN" >/dev/null 2>&1 && { echo "$PYTHON_BIN"; return; }
+  fi
+  if command -v python3 >/dev/null 2>&1; then echo "python3"; return; fi
+  if command -v python  >/dev/null 2>&1; then echo "python"; return; fi
+  echo ""
+}
+
+PYTHON_BIN="$(pick_python)"
+[[ -n "$PYTHON_BIN" ]] || { echo "ralph: python not found (need python3 or python in PATH)" >&2; exit 1; }
+export PYTHON_BIN
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CONFIG="$SCRIPT_DIR/config.env"
 FLOWCTL="$SCRIPT_DIR/flowctl"
+FLOWCTL_PY="$SCRIPT_DIR/flowctl.py"
 
 fail() { echo "ralph: $*" >&2; exit 1; }
 log() {
@@ -12,6 +36,35 @@ log() {
   [[ "${UI_ENABLED:-1}" != "1" ]] && echo "ralph: $*"
   return 0
 }
+
+# Ensure flowctl is runnable even when NTFS exec bit / shebang handling is flaky on Windows
+ensure_flowctl_wrapper() {
+  # If flowctl exists and is executable, use it
+  if [[ -f "$FLOWCTL" && -x "$FLOWCTL" ]]; then
+    return 0
+  fi
+
+  # On Windows or if flowctl not executable, create a wrapper that calls Python explicitly
+  if [[ -f "$FLOWCTL_PY" ]]; then
+    local wrapper="$SCRIPT_DIR/flowctl-wrapper.sh"
+    cat > "$wrapper" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+PY="\${PYTHON_BIN:-python3}"
+command -v "\$PY" >/dev/null 2>&1 || PY="python"
+exec "\$PY" "\$DIR/flowctl.py" "\$@"
+SH
+    chmod +x "$wrapper" 2>/dev/null || true
+    FLOWCTL="$wrapper"
+    export FLOWCTL
+    return 0
+  fi
+
+  fail "missing flowctl (expected $SCRIPT_DIR/flowctl or $SCRIPT_DIR/flowctl.py)"
+}
+
+ensure_flowctl_wrapper
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Presentation layer (human-readable output)
@@ -59,7 +112,7 @@ ui() {
 # Get title from epic/task JSON
 get_title() {
   local json="$1"
-  python3 - "$json" <<'PY'
+  "$PYTHON_BIN" - "$json" <<'PY'
 import json, sys
 try:
     data = json.loads(sys.argv[1])
@@ -71,7 +124,7 @@ PY
 
 # Count progress (done/total tasks for scoped epics)
 get_progress() {
-  python3 - "$ROOT_DIR" "${EPICS_FILE:-}" <<'PY'
+  "$PYTHON_BIN" - "$ROOT_DIR" "${EPICS_FILE:-}" <<'PY'
 import json, sys
 from pathlib import Path
 root = Path(sys.argv[1])
@@ -125,7 +178,7 @@ get_git_stats() {
     echo ""
     return
   fi
-  python3 - "$stats" <<'PY'
+  "$PYTHON_BIN" - "$stats" <<'PY'
 import re, sys
 s = sys.argv[1]
 files = re.search(r"(\d+) files? changed", s)
@@ -484,7 +537,7 @@ try:
                     out.append(text)
                 continue
 
-            # Claude stream-json (fallback)
+            # OpenCode stream-json (fallback)
             if ev.get("type") == "assistant":
                 msg = ev.get("message") or {}
                 for blk in (msg.get("content") or []):
@@ -519,6 +572,46 @@ append_progress() {
     tail -n 10 "$iter_log" || true
     echo "---"
   } >> "$PROGRESS_FILE"
+}
+
+# Write completion marker to progress.txt (MUST match find_active_runs() detection in flowctl.py)
+write_completion_marker() {
+  local reason="${1:-DONE}"
+  {
+    echo ""
+    echo "completion_reason=$reason"
+    echo "promise=COMPLETE"  # CANONICAL - must match flowctl.py substring search
+  } >> "$PROGRESS_FILE"
+}
+
+# Check PAUSE/STOP sentinel files
+check_sentinels() {
+  local pause_file="$RUN_DIR/PAUSE"
+  local stop_file="$RUN_DIR/STOP"
+
+  # Check for stop first (exit immediately, keep file for audit)
+  if [[ -f "$stop_file" ]]; then
+    log "STOP sentinel detected, exiting gracefully"
+    ui_fail "STOP sentinel detected"
+    write_completion_marker "STOPPED"
+    exit 0
+  fi
+
+  # Check for pause (log once, wait in loop, re-check STOP while waiting)
+  if [[ -f "$pause_file" ]]; then
+    log "PAUSED - waiting for resume..."
+    while [[ -f "$pause_file" ]]; do
+      # Re-check STOP while paused so external stop works
+      if [[ -f "$stop_file" ]]; then
+        log "STOP sentinel detected while paused, exiting gracefully"
+        ui_fail "STOP sentinel detected"
+        write_completion_marker "STOPPED"
+        exit 0
+      fi
+      sleep 5
+    done
+    log "Resumed"
+  fi
 }
 
 init_branches_file() {
@@ -642,6 +735,10 @@ if data.get("type") != kind:
     sys.exit(1)
 if data.get("id") != rid:
     sys.exit(1)
+if kind in ("plan_review", "impl_review"):
+    verdict = data.get("verdict")
+    if verdict not in ("SHIP", "NEEDS_WORK", "MAJOR_RETHINK"):
+        sys.exit(1)
 sys.exit(0)
 PY
 }
@@ -681,6 +778,9 @@ iter=1
 while (( iter <= MAX_ITERATIONS )); do
   iter_log="$RUN_DIR/iter-$(printf '%03d' "$iter").log"
 
+  # Check for pause/stop at start of iteration (before work selection)
+  check_sentinels
+
   selector_args=("$FLOWCTL" next --json)
   [[ -n "$EPICS_FILE" ]] && selector_args+=(--epics-file "$EPICS_FILE")
   [[ "$REQUIRE_PLAN_REVIEW" == "1" ]] && selector_args+=(--require-plan-review)
@@ -700,7 +800,7 @@ while (( iter <= MAX_ITERATIONS )); do
     fi
     maybe_close_epics
     ui_complete
-    echo "<promise>COMPLETE</promise>"
+    write_completion_marker "NO_WORK"
     exit 0
   fi
 
@@ -860,7 +960,7 @@ TXT
 
   if echo "$worker_text" | grep -q "<promise>COMPLETE</promise>"; then
     ui_complete
-    echo "<promise>COMPLETE</promise>"
+    write_completion_marker "DONE"
     exit 0
   fi
 
@@ -880,6 +980,7 @@ TXT
   if [[ "$exit_code" -eq 1 ]]; then
     log "exit=fail"
     ui_fail "OpenCode returned FAIL promise"
+    write_completion_marker "FAILED"
     exit 1
   fi
 
@@ -902,10 +1003,14 @@ TXT
     fi
   fi
 
+  # Check for pause/stop after OpenCode returns (before next iteration)
+  check_sentinels
+
   sleep 2
   iter=$((iter + 1))
 done
 
 ui_fail "Max iterations ($MAX_ITERATIONS) reached"
 echo "ralph: max iterations reached" >&2
+write_completion_marker "MAX_ITERATIONS"
 exit 1

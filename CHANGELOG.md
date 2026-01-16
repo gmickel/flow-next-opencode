@@ -1,8 +1,23 @@
 # Changelog
 
+## 0.2.3
+
+- Canonicalize `.opencode/` (remove legacy plugin/sync paths)
+- Docs moved to `docs/` with updated links
+- Ralph receipts now require verdicts
+
 ## 0.2.1
 
 - Add browser skill (standalone)
+
+## 0.2.2
+
+- flowctl stdin support + Windows-safe codex exec piping
+- flowctl status output + artifact-file guards
+- Ralph Windows hardening + watch filter updates
+- Plan/interview flows: stdin + task set-spec efficiency
+- Docs: flowctl commands (checkpoint/status/task reset) restored
+- Sync/porting guardrails updated for OpenCode
 
 ## 0.2.0
 

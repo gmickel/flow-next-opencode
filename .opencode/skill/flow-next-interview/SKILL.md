@@ -12,8 +12,8 @@ Conduct an extremely thorough interview about a task/spec and write refined deta
 **CRITICAL: flowctl is BUNDLED — NOT installed globally.** `which flowctl` will fail (expected). Always use:
 ```bash
 ROOT="$(git rev-parse --show-toplevel)"
-PLUGIN_ROOT="$ROOT/plugins/flow-next"
-FLOWCTL="$PLUGIN_ROOT/scripts/flowctl"
+OPENCODE_DIR="$ROOT/.opencode"
+FLOWCTL="$OPENCODE_DIR/bin/flowctl"
 $FLOWCTL <command>
 ```
 
@@ -41,8 +41,8 @@ If empty, ask: "What should I interview you about? Give me a Flow ID (e.g., fn-1
 
 ```bash
 ROOT="$(git rev-parse --show-toplevel)"
-PLUGIN_ROOT="$ROOT/plugins/flow-next"
-FLOWCTL="$PLUGIN_ROOT/scripts/flowctl"
+OPENCODE_DIR="$ROOT/.opencode"
+FLOWCTL="$OPENCODE_DIR/bin/flowctl"
 ```
 
 ## Detect Input Type
@@ -98,42 +98,51 @@ After interview complete, write everything back.
 
 ### For Flow Epic ID
 
-1. Create a temp file with the refined epic spec including:
-   - Clear problem statement
-   - Technical approach with specifics
-   - Key decisions made during interview
-   - Edge cases to handle
-   - Quick commands section (required)
-   - Acceptance criteria
+Update epic spec using stdin heredoc (preferred):
+```bash
+$FLOWCTL epic set-plan <id> --file - --json <<'EOF'
+# Epic Title
 
-2. Update epic spec:
-   ```bash
-   $FLOWCTL epic set-plan <id> --file <temp-md> --json
-   ```
+## Problem
+Clear problem statement
 
-3. Create/update tasks if interview revealed breakdown:
-   ```bash
-   $FLOWCTL task create --epic <id> --title "..." --json
-   $FLOWCTL task set-description <task-id> --file <temp-md> --json
-   $FLOWCTL task set-acceptance <task-id> --file <temp-md> --json
-   ```
+## Approach
+Technical approach with specifics, key decisions from interview
+
+## Edge Cases
+- Edge case 1
+- Edge case 2
+
+## Quick commands
+```bash
+# smoke test command
+```
+
+## Acceptance
+- [ ] Criterion 1
+- [ ] Criterion 2
+EOF
+```
+
+Create/update tasks if interview revealed breakdown:
+```bash
+$FLOWCTL task create --epic <id> --title "..." --json
+# Use set-spec for combined description + acceptance (fewer writes)
+$FLOWCTL task set-spec <task-id> --description /tmp/desc.md --acceptance /tmp/acc.md --json
+```
 
 ### For Flow Task ID
 
-1. Write description to temp file with:
-   - Clear task description
-   - Technical details from interview
-   - Edge cases
+Update task using combined set-spec (preferred) or separate calls:
+```bash
+# Preferred: combined set-spec (2 writes instead of 4)
+$FLOWCTL task set-spec <id> --description /tmp/desc.md --acceptance /tmp/acc.md --json
 
-2. Write acceptance to temp file with:
-   - Checkboxes for acceptance criteria
-   - Specific, testable conditions
-
-3. Update task:
-   ```bash
-   $FLOWCTL task set-description <id> --file <desc-temp.md> --json
-   $FLOWCTL task set-acceptance <id> --file <acc-temp.md> --json
-   ```
+# Or use stdin for description only:
+$FLOWCTL task set-description <id> --file - --json <<'EOF'
+Clear task description with technical details and edge cases from interview
+EOF
+```
 
 ### For File Path
 

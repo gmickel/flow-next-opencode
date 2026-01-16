@@ -15,8 +15,8 @@ The reviewer model only sees provided context. RepoPrompt's Builder discovers co
 ```bash
 set -e
 ROOT="$(git rev-parse --show-toplevel)"
-PLUGIN_ROOT="$ROOT/plugins/flow-next"
-FLOWCTL="$PLUGIN_ROOT/scripts/flowctl"
+OPENCODE_DIR="$ROOT/.opencode"
+FLOWCTL="$OPENCODE_DIR/bin/flowctl"
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 # Check available backends
@@ -25,7 +25,7 @@ HAVE_RP=$(which rp-cli >/dev/null 2>&1 && echo 1 || echo 0)
 # Get configured backend (priority: env > config)
 BACKEND="${FLOW_REVIEW_BACKEND:-}"
 if [[ -z "$BACKEND" ]]; then
-  BACKEND="$($FLOWCTL config get review.backend 2>/dev/null | jq -r '.value // empty' 2>/dev/null || echo "")"
+  BACKEND="$($FLOWCTL config get review.backend --json 2>/dev/null | jq -r '.value // empty' 2>/dev/null || echo "")"
 fi
 
 # Fallback to available (opencode preferred)
@@ -65,15 +65,24 @@ Include:
 - Review criteria (completeness, feasibility, clarity, architecture, risks, scope, testability)
 - Required verdict tag
 
-### Step 3: Execute review
+### Step 3: Execute review (subagent)
 
-Use the task tool:
-- subagent_type: `opencode-reviewer`
-- prompt: `<review prompt>`
+Use the **task** tool with subagent_type `opencode-reviewer`. The reviewer must gather context itself via tools, including Flow plan/spec.
 
-Capture `session_id` from the `<task_metadata>` block in the tool output and reuse it for any re-review by passing `session_id` back into the task tool. This keeps the same subagent chat.
+**Task tool call** (example):
+```json
+{
+  "description": "Plan review",
+  "prompt": "You are the OpenCode reviewer. Review the plan for EPIC_ID. Rules: no questions, no code changes, no TodoWrite. REQUIRED: set FLOWCTL to `.opencode/bin/flowctl`, then run `$FLOWCTL show <EPIC_ID> --json` and `$FLOWCTL cat <EPIC_ID>`. Review for completeness, feasibility, clarity, architecture, risks (incl security), scope, and testability. End with exactly one verdict tag: <verdict>SHIP</verdict> or <verdict>NEEDS_WORK</verdict> or <verdict>MAJOR_RETHINK</verdict>.",
+  "subagent_type": "opencode-reviewer"
+}
+```
 
-**Output must include** `<verdict>SHIP</verdict>` or `<verdict>NEEDS_WORK</verdict>` or `<verdict>MAJOR_RETHINK</verdict>`.
+**After the task completes**:
+- Parse `VERDICT` from the subagent output.
+- Extract `session_id` from the `<task_metadata>` block (used for re-reviews).
+
+If `VERDICT` is empty, output `<promise>RETRY</promise>` and stop.
 
 ### Step 4: Update Status
 
@@ -101,7 +110,7 @@ EOF
 If `VERDICT=NEEDS_WORK`:
 1. Parse issues from output
 2. Fix plan via `$FLOWCTL epic set-plan`
-3. Re-run Step 3 (same backend, same `session_id`)
+3. Re-run Step 3 **with the same task session_id** (pass `session_id` to the task tool)
 4. Repeat until SHIP
 
 ---
@@ -138,6 +147,12 @@ $FLOWCTL cat <id>
 ```
 
 Save output for inclusion in review prompt. Compose a 1-2 sentence summary for the setup-review command.
+
+**Save checkpoint** (protects against context compaction during review):
+```bash
+$FLOWCTL checkpoint save --epic <id> --json
+```
+This creates `.flow/.checkpoint-<id>.json` with full state. If compaction occurs during review-fix cycles, restore with `$FLOWCTL checkpoint restore --epic <id>`.
 
 ---
 
@@ -242,6 +257,19 @@ EOF
 fi
 ```
 
+### Update status
+
+Extract verdict from response, then:
+```bash
+# If SHIP
+$FLOWCTL epic set-plan-review-status <EPIC_ID> --status ship --json
+
+# If NEEDS_WORK or MAJOR_RETHINK
+$FLOWCTL epic set-plan-review-status <EPIC_ID> --status needs_work --json
+```
+
+If no verdict tag, output `<promise>RETRY</promise>` and stop.
+
 ---
 
 ## Fix Loop (RP)
@@ -254,9 +282,20 @@ If verdict is NEEDS_WORK:
 2. **Fix the plan** - Address each issue. Write updated plan to temp file.
 3. **Update plan in flowctl** (MANDATORY before re-review):
    ```bash
+   # Option A: stdin heredoc (preferred, no temp file)
+   $FLOWCTL epic set-plan <EPIC_ID> --file - --json <<'EOF'
+   <updated plan content>
+   EOF
+
+   # Option B: temp file (if content has single quotes)
    $FLOWCTL epic set-plan <EPIC_ID> --file /tmp/updated-plan.md --json
    ```
    **If you skip this step and re-review with same content, reviewer will return NEEDS_WORK again.**
+
+   **Recovery**: If context compaction occurred, restore from checkpoint first:
+   ```bash
+   $FLOWCTL checkpoint restore --epic <EPIC_ID> --json
+   ```
 
 4. **Re-review with fix summary** (only AFTER step 3):
 

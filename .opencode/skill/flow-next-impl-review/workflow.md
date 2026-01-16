@@ -15,8 +15,8 @@ The reviewer model only sees provided context. RepoPrompt's Builder discovers co
 ```bash
 set -e
 ROOT="$(git rev-parse --show-toplevel)"
-PLUGIN_ROOT="$ROOT/plugins/flow-next"
-FLOWCTL="$PLUGIN_ROOT/scripts/flowctl"
+OPENCODE_DIR="$ROOT/.opencode"
+FLOWCTL="$OPENCODE_DIR/bin/flowctl"
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 # Check available backends
@@ -25,7 +25,7 @@ HAVE_RP=$(which rp-cli >/dev/null 2>&1 && echo 1 || echo 0)
 # Get configured backend (priority: env > config)
 BACKEND="${FLOW_REVIEW_BACKEND:-}"
 if [[ -z "$BACKEND" ]]; then
-  BACKEND="$($FLOWCTL config get review.backend 2>/dev/null | jq -r '.value // empty' 2>/dev/null || echo "")"
+  BACKEND="$($FLOWCTL config get review.backend --json 2>/dev/null | jq -r '.value // empty' 2>/dev/null || echo "")"
 fi
 
 # Fallback to available (opencode preferred)
@@ -71,15 +71,24 @@ Include:
 - Review criteria (correctness, security, performance, tests, risks)
 - Required verdict tag
 
-### Step 3: Execute review
+### Step 3: Execute review (subagent)
 
-Use the task tool:
-- subagent_type: `opencode-reviewer`
-- prompt: `<review prompt>`
+Use the **task** tool with subagent_type `opencode-reviewer`. The reviewer must gather context itself via tools, including Flow task/epic specs.
 
-Capture `session_id` from the `<task_metadata>` block in the tool output and reuse it for any re-review by passing `session_id` back into the task tool. This keeps the same subagent chat.
+**Task tool call** (example):
+```json
+{
+  "description": "Impl review",
+  "prompt": "You are the OpenCode reviewer. Review current branch vs main. Rules: no questions, no code changes, no TodoWrite. REQUIRED: set FLOWCTL to `.opencode/bin/flowctl`, then run `$FLOWCTL show <TASK_ID> --json` and `$FLOWCTL cat <TASK_ID>`. Then get epic id from task JSON and run `$FLOWCTL show <EPIC_ID> --json` and `$FLOWCTL cat <EPIC_ID>`. REQUIRED: run `git log main..HEAD --oneline` (fallback master), `git diff main..HEAD --stat`, `git diff main..HEAD`. Read any changed files needed for correctness. Then output issues grouped by severity and end with exactly one verdict tag: <verdict>SHIP</verdict> or <verdict>NEEDS_WORK</verdict> or <verdict>MAJOR_RETHINK</verdict>.",
+  "subagent_type": "opencode-reviewer"
+}
+```
 
-**Output must include** `<verdict>SHIP</verdict>` or `<verdict>NEEDS_WORK</verdict>` or `<verdict>MAJOR_RETHINK</verdict>`.
+**After the task completes**:
+- Parse `VERDICT` from the subagent output.
+- Extract `session_id` from the `<task_metadata>` block (used for re-reviews).
+
+If `VERDICT` is empty, output `<promise>RETRY</promise>` and stop.
 
 ### Step 4: Receipt
 
@@ -98,7 +107,7 @@ EOF
 If `VERDICT=NEEDS_WORK`:
 1. Parse issues from output
 2. Fix code, commit, run tests
-3. Re-run Step 3 (same backend, same `session_id`)
+3. Re-run Step 3 **with the same task session_id** (pass `session_id` to the task tool)
 4. Repeat until SHIP
 
 ---

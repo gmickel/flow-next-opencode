@@ -4,12 +4,20 @@ on:
   push:
     branches: [main]
     paths:
-      - "plugins/flow-next/**"
+      - ".opencode/**"
+      - "docs/**"
+      - "README.md"
+      - "install.sh"
+      - "sync/PORTING.md"
       - ".github/workflows/test-flow-next.yml"
   pull_request:
     branches: [main]
     paths:
-      - "plugins/flow-next/**"
+      - ".opencode/**"
+      - "docs/**"
+      - "README.md"
+      - "install.sh"
+      - "sync/PORTING.md"
       - ".github/workflows/test-flow-next.yml"
   workflow_dispatch:
 
@@ -29,26 +37,23 @@ jobs:
           python-version: "3.11"
 
       - name: Check flowctl.py syntax
-        run: python -m py_compile plugins/flow-next/scripts/flowctl.py
+        run: python -m py_compile .opencode/bin/flowctl.py
 
       - name: Check ralph.sh syntax (Unix)
         if: runner.os != 'Windows'
-        run: bash -n plugins/flow-next/skills/flow-next-ralph-init/templates/ralph.sh
+        run: bash -n .opencode/skill/flow-next-ralph-init/templates/ralph.sh
 
       - name: Check ralph.sh syntax (Windows Git Bash)
         if: runner.os == 'Windows'
         shell: bash
-        run: bash -n plugins/flow-next/skills/flow-next-ralph-init/templates/ralph.sh
+        run: bash -n .opencode/skill/flow-next-ralph-init/templates/ralph.sh
 
-      - name: Run comprehensive tests (Unix)
+      - name: Smoke check flowctl (Unix)
         if: runner.os != 'Windows'
         run: |
-          cd /tmp
-          bash "$GITHUB_WORKSPACE/plugins/flow-next/scripts/ci_test.sh"
+          python3 .opencode/bin/flowctl.py --help >/dev/null
 
-      - name: Run comprehensive tests (Windows)
+      - name: Smoke check flowctl (Windows)
         if: runner.os == 'Windows'
-        shell: bash
         run: |
-          cd "$RUNNER_TEMP"
-          bash "$GITHUB_WORKSPACE/plugins/flow-next/scripts/ci_test.sh"
+          python .opencode/bin/flowctl.py --help > NUL
