@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Watch filter for Ralph - parses OpenCode run --format json (and Claude stream-json fallback).
+Watch filter for Ralph - parses Claude's stream-json output and shows key events.
 
 Reads JSON lines from stdin, outputs formatted tool calls in TUI style.
 
 CRITICAL: This filter is "fail open" - if output breaks, it continues draining
-stdin to prevent SIGPIPE cascading to upstream processes (tee, worker).
+stdin to prevent SIGPIPE cascading to upstream processes (tee, claude).
 
 Usage:
     watch-filter.py           # Show tool calls only
-    watch-filter.py --verbose # Show tool calls + text responses
+    watch-filter.py --verbose # Show tool calls + thinking + text responses
 """
 
 import argparse
@@ -45,7 +45,6 @@ ICONS = {
     "WebSearch": "🔎",
     "TodoWrite": "📋",
     "AskUserQuestion": "❓",
-    "Question": "❓",
     "Skill": "⚡",
 }
 
@@ -77,10 +76,6 @@ def truncate(s: str, max_len: int = 60) -> str:
     return s
 
 
-def normalize_path(path: str) -> str:
-    return path.split("/")[-1] if path else "unknown"
-
-
 def format_tool_use(tool_name: str, tool_input: dict) -> str:
     """Format a tool use event for TUI display."""
     icon = ICONS.get(tool_name, "🔹")
@@ -93,16 +88,16 @@ def format_tool_use(tool_name: str, tool_input: dict) -> str:
         return f"{icon} Bash: {truncate(cmd, 60)}"
 
     elif tool_name == "Edit":
-        path = tool_input.get("file_path") or tool_input.get("filePath", "")
-        return f"{icon} Edit: {normalize_path(path)}"
+        path = tool_input.get("file_path", "")
+        return f"{icon} Edit: {path.split('/')[-1] if path else 'unknown'}"
 
     elif tool_name == "Write":
-        path = tool_input.get("file_path") or tool_input.get("filePath", "")
-        return f"{icon} Write: {normalize_path(path)}"
+        path = tool_input.get("file_path", "")
+        return f"{icon} Write: {path.split('/')[-1] if path else 'unknown'}"
 
     elif tool_name == "Read":
-        path = tool_input.get("file_path") or tool_input.get("filePath", "")
-        return f"{icon} Read: {normalize_path(path)}"
+        path = tool_input.get("file_path", "")
+        return f"{icon} Read: {path.split('/')[-1] if path else 'unknown'}"
 
     elif tool_name == "Grep":
         pattern = tool_input.get("pattern", "")
@@ -132,37 +127,6 @@ def format_tool_use(tool_name: str, tool_input: dict) -> str:
         return f"{icon} {tool_name}"
 
 
-def format_tool_use_opencode(part: dict) -> str:
-    tool = part.get("tool", "")
-    state = part.get("state") or {}
-    tool_input = state.get("input") or {}
-    title = state.get("title") or ""
-
-    # Map OpenCode tool names to Claude-style names for icon mapping
-    tool_name = {
-        "bash": "Bash",
-        "edit": "Edit",
-        "write": "Write",
-        "read": "Read",
-        "grep": "Grep",
-        "glob": "Glob",
-        "list": "List",
-        "webfetch": "WebFetch",
-        "websearch": "WebSearch",
-        "todowrite": "TodoWrite",
-        "question": "Question",
-        "task": "Task",
-        "skill": "Skill",
-        "patch": "Patch",
-    }.get(tool, tool)
-
-    # Prefer explicit title if provided
-    if title:
-        return f"{ICONS.get(tool_name, '🔹')} {tool_name}: {truncate(title, 60)}"
-
-    return format_tool_use(tool_name, tool_input)
-
-
 def format_tool_result(block: dict) -> Optional[str]:
     """Format a tool_result block (errors only).
 
@@ -188,27 +152,6 @@ def format_tool_result(block: dict) -> Optional[str]:
 def process_event(event: dict, verbose: bool) -> None:
     """Process a single stream-json event."""
     event_type = event.get("type", "")
-
-    # OpenCode run --format json
-    if event_type == "tool_use":
-        part = event.get("part") or {}
-        formatted = format_tool_use_opencode(part)
-        safe_print(f"{INDENT}{C_DIM}{formatted}{C_RESET}")
-        return
-
-    if verbose and event_type == "text":
-        part = event.get("part") or {}
-        text = part.get("text", "")
-        if text.strip():
-            safe_print(f"{INDENT}{C_CYAN}💬 {text}{C_RESET}")
-        return
-
-    if event_type == "error":
-        error = event.get("error", {})
-        msg = error.get("message") if isinstance(error, dict) else str(error)
-        if msg:
-            safe_print(f"{INDENT}{C_DIM}❌ {truncate(msg, 80)}{C_RESET}")
-        return
 
     # Tool use events (assistant messages)
     if event_type == "assistant":

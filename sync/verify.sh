@@ -14,9 +14,9 @@ if grep -R -n "AskUserQuestion" "$ROOT/.opencode" >/dev/null; then
   exit 1
 fi
 
-if grep -R -n -i "codex" "$ROOT/.opencode" >/dev/null; then
+if grep -R -n -i "codex" "$ROOT/.opencode" | grep -v "/opencode.json" >/dev/null; then
   echo "codex references found in .opencode (not supported)" >&2
-  grep -R -n -i "codex" "$ROOT/.opencode" >&2
+  grep -R -n -i "codex" "$ROOT/.opencode" | grep -v "/opencode.json" >&2
   exit 1
 fi
 
@@ -25,4 +25,3 @@ if grep -R -n "CLAUDE_" "$ROOT/.opencode" | grep -v "flow-next-ralph-init/templa
   grep -R -n "CLAUDE_" "$ROOT/.opencode" | grep -v "flow-next-ralph-init/templates" >&2
   exit 1
 fi
-

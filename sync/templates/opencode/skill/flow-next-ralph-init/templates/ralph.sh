@@ -1,10 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Windows / Git Bash hardening (GH-35)
+# ─────────────────────────────────────────────────────────────────────────────
+UNAME_S="$(uname -s 2>/dev/null || echo "")"
+IS_WINDOWS=0
+case "$UNAME_S" in
+  MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=1 ;;
+esac
+
+# Python detection: prefer python3, fallback to python (common on Windows)
+pick_python() {
+  if [[ -n "${PYTHON_BIN:-}" ]]; then
+    command -v "$PYTHON_BIN" >/dev/null 2>&1 && { echo "$PYTHON_BIN"; return; }
+  fi
+  if command -v python3 >/dev/null 2>&1; then echo "python3"; return; fi
+  if command -v python  >/dev/null 2>&1; then echo "python"; return; fi
+  echo ""
+}
+
+PYTHON_BIN="$(pick_python)"
+[[ -n "$PYTHON_BIN" ]] || { echo "ralph: python not found (need python3 or python in PATH)" >&2; exit 1; }
+export PYTHON_BIN
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CONFIG="$SCRIPT_DIR/config.env"
 FLOWCTL="$SCRIPT_DIR/flowctl"
+FLOWCTL_PY="$SCRIPT_DIR/flowctl.py"
 
 fail() { echo "ralph: $*" >&2; exit 1; }
 log() {
@@ -12,6 +36,35 @@ log() {
   [[ "${UI_ENABLED:-1}" != "1" ]] && echo "ralph: $*"
   return 0
 }
+
+# Ensure flowctl is runnable even when NTFS exec bit / shebang handling is flaky on Windows
+ensure_flowctl_wrapper() {
+  # If flowctl exists and is executable, use it
+  if [[ -f "$FLOWCTL" && -x "$FLOWCTL" ]]; then
+    return 0
+  fi
+
+  # On Windows or if flowctl not executable, create a wrapper that calls Python explicitly
+  if [[ -f "$FLOWCTL_PY" ]]; then
+    local wrapper="$SCRIPT_DIR/flowctl-wrapper.sh"
+    cat > "$wrapper" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+PY="\${PYTHON_BIN:-python3}"
+command -v "\$PY" >/dev/null 2>&1 || PY="python"
+exec "\$PY" "\$DIR/flowctl.py" "\$@"
+SH
+    chmod +x "$wrapper" 2>/dev/null || true
+    FLOWCTL="$wrapper"
+    export FLOWCTL
+    return 0
+  fi
+
+  fail "missing flowctl (expected $SCRIPT_DIR/flowctl or $SCRIPT_DIR/flowctl.py)"
+}
+
+ensure_flowctl_wrapper
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Presentation layer (human-readable output)
@@ -59,7 +112,7 @@ ui() {
 # Get title from epic/task JSON
 get_title() {
   local json="$1"
-  python3 - "$json" <<'PY'
+  "$PYTHON_BIN" - "$json" <<'PY'
 import json, sys
 try:
     data = json.loads(sys.argv[1])
@@ -71,7 +124,7 @@ PY
 
 # Count progress (done/total tasks for scoped epics)
 get_progress() {
-  python3 - "$ROOT_DIR" "${EPICS_FILE:-}" <<'PY'
+  "$PYTHON_BIN" - "$ROOT_DIR" "${EPICS_FILE:-}" <<'PY'
 import json, sys
 from pathlib import Path
 root = Path(sys.argv[1])
@@ -125,7 +178,7 @@ get_git_stats() {
     echo ""
     return
   fi
-  python3 - "$stats" <<'PY'
+  "$PYTHON_BIN" - "$stats" <<'PY'
 import re, sys
 s = sys.argv[1]
 files = re.search(r"(\d+) files? changed", s)

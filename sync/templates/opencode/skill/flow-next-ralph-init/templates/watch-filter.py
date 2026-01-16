@@ -44,7 +44,6 @@ ICONS = {
     "WebFetch": "🌐",
     "WebSearch": "🔎",
     "TodoWrite": "📋",
-    "AskUserQuestion": "❓",
     "Question": "❓",
     "Skill": "⚡",
 }

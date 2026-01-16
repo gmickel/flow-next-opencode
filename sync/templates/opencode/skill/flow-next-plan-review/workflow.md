@@ -139,6 +139,12 @@ $FLOWCTL cat <id>
 
 Save output for inclusion in review prompt. Compose a 1-2 sentence summary for the setup-review command.
 
+**Save checkpoint** (protects against context compaction during review):
+```bash
+$FLOWCTL checkpoint save --epic <id> --json
+```
+This creates `.flow/.checkpoint-<id>.json` with full state. If compaction occurs during review-fix cycles, restore with `$FLOWCTL checkpoint restore --epic <id>`.
+
 ---
 
 ## Phase 2: Augment Selection (RP)
@@ -242,6 +248,19 @@ EOF
 fi
 ```
 
+### Update status
+
+Extract verdict from response, then:
+```bash
+# If SHIP
+$FLOWCTL epic set-plan-review-status <EPIC_ID> --status ship --json
+
+# If NEEDS_WORK or MAJOR_RETHINK
+$FLOWCTL epic set-plan-review-status <EPIC_ID> --status needs_work --json
+```
+
+If no verdict tag, output `<promise>RETRY</promise>` and stop.
+
 ---
 
 ## Fix Loop (RP)
@@ -254,9 +273,20 @@ If verdict is NEEDS_WORK:
 2. **Fix the plan** - Address each issue. Write updated plan to temp file.
 3. **Update plan in flowctl** (MANDATORY before re-review):
    ```bash
+   # Option A: stdin heredoc (preferred, no temp file)
+   $FLOWCTL epic set-plan <EPIC_ID> --file - --json <<'EOF'
+   <updated plan content>
+   EOF
+
+   # Option B: temp file (if content has single quotes)
    $FLOWCTL epic set-plan <EPIC_ID> --file /tmp/updated-plan.md --json
    ```
    **If you skip this step and re-review with same content, reviewer will return NEEDS_WORK again.**
+
+   **Recovery**: If context compaction occurred, restore from checkpoint first:
+   ```bash
+   $FLOWCTL checkpoint restore --epic <EPIC_ID> --json
+   ```
 
 4. **Re-review with fix summary** (only AFTER step 3):
 

@@ -4,6 +4,15 @@
 
 - Add browser skill (standalone)
 
+## 0.2.2
+
+- flowctl stdin support + Windows-safe codex exec piping
+- flowctl status output + artifact-file guards
+- Ralph Windows hardening + watch filter updates
+- Plan/interview flows: stdin + task set-spec efficiency
+- Docs: flowctl commands (checkpoint/status/task reset) restored
+- Sync/porting guardrails updated for OpenCode
+
 ## 0.2.0
 
 - Ralph (autonomous loop) + opencode runner/reviewer config

@@ -44,17 +44,17 @@ If empty, ask: "What should I plan? Give me the feature or bug in 1-5 sentences.
 
 Check available backends and configured preference:
 ```bash
-HAVE_RP=0
+HAVE_RP=0;
 if command -v rp-cli >/dev/null 2>&1; then
-  HAVE_RP=1
+  HAVE_RP=1;
 elif [[ -x /opt/homebrew/bin/rp-cli || -x /usr/local/bin/rp-cli ]]; then
-  HAVE_RP=1
-fi
+  HAVE_RP=1;
+fi;
 
 # Check configured backend (priority: env > config)
-CONFIGURED_BACKEND="${FLOW_REVIEW_BACKEND:-}"
+CONFIGURED_BACKEND="${FLOW_REVIEW_BACKEND:-}";
 if [[ -z "$CONFIGURED_BACKEND" ]]; then
-  CONFIGURED_BACKEND="$($FLOWCTL config get review.backend 2>/dev/null | jq -r '.value // empty')"
+  CONFIGURED_BACKEND="$($FLOWCTL config get review.backend 2>/dev/null | jq -r '.value // empty')";
 fi
 ```
 

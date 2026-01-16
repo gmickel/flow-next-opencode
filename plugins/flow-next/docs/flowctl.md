@@ -7,7 +7,7 @@ CLI for `.flow/` task tracking. Agents must use flowctl for all writes.
 ## Available Commands
 
 ```
-init, detect, status, epic, task, dep, show, epics, tasks, list, cat, ready, next, start, done, block, validate, ralph, config, memory, prep-chat, rp, codex
+init, detect, epic, task, dep, show, epics, tasks, list, cat, ready, next, start, done, block, validate, config, memory, prep-chat, rp, codex, checkpoint, status
 ```
 
 ## Multi-User Safety
@@ -71,24 +71,6 @@ Output:
 {"success": true, "exists": true, "valid": true, "path": "/repo/.flow"}
 ```
 
-### status
-
-Show `.flow/` state and active Ralph runs.
-
-```bash
-flowctl status [--json]
-```
-
-Example output:
-```
-Flow status:
-  Epics: open=2, done=1
-  Tasks: todo=3, in_progress=1, blocked=0, done=4
-
-Active Ralph runs:
-  ralph-20260115T000303Z-... (iteration 3, task fn-1-abc.2) [running]
-```
-
 ### epic create
 
 Create new epic.
@@ -124,22 +106,6 @@ Set epic branch_name.
 
 ```bash
 flowctl epic set-branch fn-1 --branch "fn-1-epic" [--json]
-```
-
-### epic add-dep
-
-Add an epic-level dependency.
-
-```bash
-flowctl epic add-dep fn-2 fn-1 [--json]
-```
-
-### epic rm-dep
-
-Remove an epic-level dependency.
-
-```bash
-flowctl epic rm-dep fn-2 fn-1 [--json]
 ```
 
 ### epic close
@@ -179,14 +145,25 @@ Set task acceptance section.
 flowctl task set-acceptance fn-1.2 --file accept.md [--json]
 ```
 
-### task reset
+### task set-spec
 
-Reset a completed/blocked task back to `todo`.
+Set description and acceptance in one call (fewer writes).
 
 ```bash
-flowctl task reset fn-1.2 [--json]
-flowctl task reset fn-1.2 --cascade   # also reset dependent tasks (same epic)
+flowctl task set-spec fn-1.2 --description desc.md --acceptance accept.md [--json]
 ```
+
+Both `--description` and `--acceptance` are optional; supply one or both.
+
+### task reset
+
+Reset task to `todo` status, clearing assignee and completion data.
+
+```bash
+flowctl task reset fn-1.2 [--cascade] [--json]
+```
+
+Use `--cascade` to also reset dependent tasks within the same epic.
 
 ### dep add
 
@@ -387,21 +364,6 @@ Checks:
 
 Exits with code 1 if validation fails (for CI use).
 
-### ralph
-
-Control active Ralph runs.
-
-```bash
-# Pause/resume/stop (auto-detect if single run)
-flowctl ralph pause
-flowctl ralph resume
-flowctl ralph stop
-flowctl ralph status
-
-# Specify run when multiple active
-flowctl ralph pause --run <run-id>
-```
-
 ### config
 
 Manage project configuration stored in `.flow/config.json`.
@@ -413,7 +375,7 @@ flowctl config get review.backend [--json]
 
 # Set a config value
 flowctl config set memory.enabled true [--json]
-flowctl config set review.backend opencode [--json]  # opencode, rp, or none
+flowctl config set review.backend codex [--json]  # rp, codex, or none
 
 # Toggle boolean config
 flowctl config toggle memory.enabled [--json]
@@ -424,7 +386,7 @@ flowctl config toggle memory.enabled [--json]
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `memory.enabled` | bool | `false` | Enable memory system |
-| `review.backend` | string | auto | Default review backend (`opencode`, `rp`, `none`) |
+| `review.backend` | string | auto | Default review backend (`rp`, `codex`, `none`) |
 
 Auto-detect priority: `FLOW_REVIEW_BACKEND` env → config → available CLI.
 
@@ -563,6 +525,38 @@ References: src/middleware.py:45 (calls authenticate), tests/test_auth.py:12
 ```
 
 **Session continuity:** Receipt includes `session_id` (thread_id from codex). Subsequent reviews read the existing receipt and resume the conversation, maintaining full context across fix → re-review cycles.
+
+### checkpoint
+
+Save and restore epic state (used during review-fix cycles).
+
+```bash
+# Save epic state to .flow/.checkpoint-fn-1.json
+flowctl checkpoint save --epic fn-1 [--json]
+
+# Restore epic state from checkpoint
+flowctl checkpoint restore --epic fn-1 [--json]
+
+# Delete checkpoint
+flowctl checkpoint delete --epic fn-1 [--json]
+```
+
+Checkpoints preserve full epic + task state. Useful when compaction occurs during plan-review cycles.
+
+### status
+
+Show `.flow/` state summary.
+
+```bash
+flowctl status [--json]
+```
+
+Output:
+```json
+{"success": true, "epic_count": 2, "task_count": 5, "done_count": 2, "active_runs": []}
+```
+
+Human-readable output shows epic/task counts and any active Ralph runs.
 
 ## Ralph Receipts
 

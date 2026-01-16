@@ -5,9 +5,6 @@ Inputs:
 - PLAN_REVIEW={{PLAN_REVIEW}}
 - REQUIRE_PLAN_REVIEW={{REQUIRE_PLAN_REVIEW}}
 
-Treat the following as the user's exact input to flow-next-plan-review:
-`{{EPIC_ID}} --review={{PLAN_REVIEW}}`
-
 Steps:
 1) Re-anchor:
    - scripts/ralph/flowctl show {{EPIC_ID}} --json
@@ -17,18 +14,14 @@ Steps:
 
 Ralph mode rules (must follow):
 - If PLAN_REVIEW=rp: use `flowctl rp` wrappers (setup-review, select-add, prompt-get, chat-send).
-- If PLAN_REVIEW=opencode: use the task tool with subagent_type `opencode-reviewer`.
-- Write receipt via bash heredoc (no Write tool) if REVIEW_RECEIPT_PATH is set.
-- Do NOT run /flow-next:* as shell commands.
+- If PLAN_REVIEW=codex: use `flowctl codex` wrappers (plan-review with --receipt).
+- Write receipt via bash heredoc (no Write tool) if `REVIEW_RECEIPT_PATH` set.
 - If any rule is violated, output `<promise>RETRY</promise>` and stop.
 
 2) Plan review gate:
-   - Call the skill tool: flow-next-plan-review.
-   - Follow the workflow in the skill using the exact arguments above.
-   - Do NOT stop after loading the skill.
-   - For opencode: run reviewer via task tool and require `<verdict>` tag.
-   - For rp: use flowctl rp wrappers (no --json, no --new-chat on re-review).
-   - For export: follow export flow in skill.
+   - If PLAN_REVIEW=rp: run `/flow-next:plan-review {{EPIC_ID}} --review=rp`
+   - If PLAN_REVIEW=codex: run `/flow-next:plan-review {{EPIC_ID}} --review=codex`
+   - If PLAN_REVIEW=export: run `/flow-next:plan-review {{EPIC_ID}} --review=export`
    - If PLAN_REVIEW=none:
      - If REQUIRE_PLAN_REVIEW=1: output `<promise>RETRY</promise>` and stop.
      - Else: set ship and stop:
@@ -40,15 +33,16 @@ Ralph mode rules (must follow):
    - Repeats until SHIP
    - Only returns to Ralph after SHIP or MAJOR_RETHINK
 
-4) IMMEDIATELY after SHIP verdict, write receipt (for any review mode != none):
+4) IMMEDIATELY after SHIP verdict, write receipt (for rp mode):
    ```bash
    mkdir -p "$(dirname '{{REVIEW_RECEIPT_PATH}}')"
    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
    cat > '{{REVIEW_RECEIPT_PATH}}' <<EOF
-   {"type":"plan_review","id":"{{EPIC_ID}}","mode":"{{PLAN_REVIEW}}","timestamp":"$ts"}
+   {"type":"plan_review","id":"{{EPIC_ID}}","mode":"rp","timestamp":"$ts"}
    EOF
    ```
-   **CRITICAL: Copy EXACTLY. The "id":"{{EPIC_ID}}" field is REQUIRED.**
+   For codex mode, receipt is written automatically by `flowctl codex plan-review --receipt`.
+   **CRITICAL: Copy EXACTLY. The `"id":"{{EPIC_ID}}"` field is REQUIRED.**
    Missing id = verification fails = forced retry.
 
 5) After SHIP:

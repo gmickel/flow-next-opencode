@@ -11,7 +11,7 @@ Scaffold repo-local Ralph harness. Opt-in only.
 
 - Only create `scripts/ralph/` in the current repo.
 - If `scripts/ralph/` already exists, stop and ask the user to remove it first.
-- Copy templates from `templates/` into `scripts/ralph/`.
+- Copy templates from `.opencode/skill/flow-next-ralph-init/templates/` into `scripts/ralph/`.
 - Copy `flowctl` and `flowctl.py` from `$PLUGIN_ROOT/scripts/` into `scripts/ralph/`.
 - Set executable bit on `scripts/ralph/ralph.sh`, `scripts/ralph/ralph_once.sh`, and `scripts/ralph/flowctl`.
 
@@ -21,15 +21,16 @@ Scaffold repo-local Ralph harness. Opt-in only.
    ```bash
    ROOT="$(git rev-parse --show-toplevel)"
    PLUGIN_ROOT="$ROOT/plugins/flow-next"
+   TEMPLATE_DIR="$ROOT/.opencode/skill/flow-next-ralph-init/templates"
    ```
 2. Check `scripts/ralph/` does not exist.
 3. Detect available review backends:
    ```bash
-HAVE_RP=0
+HAVE_RP=0;
 if command -v rp-cli >/dev/null 2>&1; then
-  HAVE_RP=1
+  HAVE_RP=1;
 elif [[ -x /opt/homebrew/bin/rp-cli || -x /usr/local/bin/rp-cli ]]; then
-  HAVE_RP=1
+  HAVE_RP=1;
 fi
    ```
 4. Determine review backend:
@@ -49,6 +50,11 @@ fi
    - `PLAN_REVIEW=<chosen>` and `WORK_REVIEW=<chosen>`
    - replace `{{PLAN_REVIEW}}` and `{{WORK_REVIEW}}` placeholders in the template
 6. Copy templates and flowctl files.
+   ```bash
+   mkdir -p scripts/ralph
+   cp -R "$TEMPLATE_DIR/." scripts/ralph/
+   cp "$PLUGIN_ROOT/scripts/flowctl" "$PLUGIN_ROOT/scripts/flowctl.py" scripts/ralph/
+   ```
 7. Print next steps (run from terminal, NOT inside OpenCode):
    - Edit `scripts/ralph/config.env` to customize settings
    - `./scripts/ralph/ralph_once.sh` (one iteration, observe)

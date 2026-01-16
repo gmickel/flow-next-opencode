@@ -5,9 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../../LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Plugin-blueviolet)](https://claude.ai/code)
 
-[![Version](https://img.shields.io/badge/Version-0.7.1-green)](../../CHANGELOG.md)
-
-[![Version](https://img.shields.io/badge/Version-0.7.1-green)](../../CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-0.10.0-green)](../../CHANGELOG.md)
 
 [![Status](https://img.shields.io/badge/Status-Active_Development-brightgreen)](../../CHANGELOG.md)
 
@@ -182,10 +180,13 @@ Want to run overnight? See [Ralph Mode](#ralph-autonomous-mode).
 
 ```bash
 # Check task status
-flowctl show fn-1.2 --json | jq '.status'
+flowctl show fn-1.2 --json
 
-# Mark as pending to retry
-flowctl task set fn-1.2 --status pending
+# Reset to todo (from done/blocked)
+flowctl task reset fn-1.2
+
+# Reset + dependents in same epic
+flowctl task reset fn-1.2 --cascade
 ```
 
 ### Clean up `.flow/` safely
@@ -221,6 +222,19 @@ ls scripts/ralph/runs/*/receipts/
 cat scripts/ralph/runs/*/receipts/impl-fn-1.1.json
 # Must have: {"type":"impl_review","id":"fn-1.1",...}
 ```
+
+### Custom rp-cli instructions conflicting
+
+> **Caution**: If you have custom instructions for `rp-cli` in your `CLAUDE.md` or `AGENTS.md`, they may conflict with Flow-Next's RepoPrompt integration.
+
+Flow-Next's plan-review and impl-review skills include specific instructions for `rp-cli` usage (window selection, builder workflow, chat commands). Custom rp-cli instructions can override these and cause unexpected behavior.
+
+**Symptoms:**
+- Reviews not using the correct RepoPrompt window
+- Builder not selecting expected files
+- Chat commands failing or behaving differently
+
+**Fix:** Remove or comment out custom rp-cli instructions from your `CLAUDE.md`/`AGENTS.md` when using Flow-Next reviews. The plugin provides complete rp-cli guidance.
 
 ---
 
@@ -266,7 +280,7 @@ Ralph writes run artifacts under `scripts/ralph/runs/`, including review receipt
 
 Autonomous coding agents are taking the industry by storm—loop until done, commit, repeat. Most solutions gate progress by tests and linting alone. Ralph goes further.
 
-**Multi-model review gates**: Ralph uses [RepoPrompt](https://repoprompt.com/?atp=KJbuL4) (macOS) or OpenCode review (cross-platform) to send plan and implementation reviews to a *different* model. A second set of eyes catches blind spots that self-review misses. RepoPrompt's builder provides full file context; OpenCode uses context hints from changed files.
+**Multi-model review gates**: Ralph uses [RepoPrompt](https://repoprompt.com/?atp=KJbuL4) (macOS) or OpenAI Codex CLI (cross-platform) to send plan and implementation reviews to a *different* model. A second set of eyes catches blind spots that self-review misses. RepoPrompt's builder provides full file context; Codex uses context hints from changed files.
 
 **Review loops until Ship**: Reviews don't just flag issues—they block progress until resolved. Ralph runs fix → re-review cycles until the reviewer returns `<verdict>SHIP</verdict>`. No "LGTM with nits" that get ignored.
 
@@ -280,7 +294,7 @@ The result: code that's been reviewed by two models, tested, linted, and iterati
 
 ### Controlling Ralph
 
-External agents (CI, scripts, supervisors) can pause/resume/stop Ralph runs without killing processes.
+External agents (Clawdbot, GitHub Actions, etc.) can pause/resume/stop Ralph runs without killing processes.
 
 **CLI commands:**
 ```bash
@@ -308,7 +322,7 @@ rm scripts/ralph/runs/<run-id>/PAUSE
 touch scripts/ralph/runs/<run-id>/STOP
 ```
 
-Ralph checks sentinels at iteration boundaries (before work selection and after the model returns).
+Ralph checks sentinels at iteration boundaries (after Claude returns, before next iteration).
 
 **Task retry/rollback:**
 ```bash
@@ -409,6 +423,17 @@ Everything is bundled:
 - No external tracker CLI to install
 - No external services
 - Just Python 3
+
+### Bundled Skills
+
+Utility skills available during planning and implementation:
+
+| Skill | Use Case |
+|-------|----------|
+| `browser` | Web automation via agent-browser CLI (verify UI, scrape docs, test flows) |
+| `flow-next-rp-explorer` | Token-efficient codebase exploration via RepoPrompt |
+| `flow-next-worktree-kit` | Git worktree management for parallel work |
+| `flow-next-export-context` | Export context for external LLM review |
 
 ### Non-invasive
 

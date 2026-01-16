@@ -42,17 +42,17 @@ If found, use that backend and skip all other detection.
 
 ```bash
 # Check available backends
-HAVE_RP=0
+HAVE_RP=0;
 if command -v rp-cli >/dev/null 2>&1; then
-  HAVE_RP=1
+  HAVE_RP=1;
 elif [[ -x /opt/homebrew/bin/rp-cli || -x /usr/local/bin/rp-cli ]]; then
-  HAVE_RP=1
-fi
+  HAVE_RP=1;
+fi;
 
 # Get configured backend
-BACKEND="${FLOW_REVIEW_BACKEND:-}"
+BACKEND="${FLOW_REVIEW_BACKEND:-}";
 if [[ -z "$BACKEND" ]]; then
-  BACKEND="$($FLOWCTL config get review.backend 2>/dev/null | jq -r '.value // empty')"
+  BACKEND="$($FLOWCTL config get review.backend 2>/dev/null | jq -r '.value // empty')";
 fi
 ```
 
