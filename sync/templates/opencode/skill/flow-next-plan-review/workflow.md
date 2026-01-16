@@ -67,13 +67,13 @@ Include:
 
 ### Step 3: Execute review (subagent)
 
-Use the **task** tool with subagent_type `opencode-reviewer`. The reviewer must gather context itself via tools.
+Use the **task** tool with subagent_type `opencode-reviewer`. The reviewer must gather context itself via tools, including Flow plan/spec.
 
 **Task tool call** (example):
 ```json
 {
   "description": "Plan review",
-  "prompt": "You are the OpenCode reviewer. Review the plan for EPIC_ID. Rules: no questions, no code changes, no TodoWrite. Use bash/read to gather context. REQUIRED: run `flowctl show <EPIC_ID> --json` and `flowctl cat <EPIC_ID>`. Then review for completeness, feasibility, clarity, architecture, risks, scope, and testability. End with exactly one verdict tag: <verdict>SHIP</verdict> or <verdict>NEEDS_WORK</verdict> or <verdict>MAJOR_RETHINK</verdict>.",
+  "prompt": "You are the OpenCode reviewer. Review the plan for EPIC_ID. Rules: no questions, no code changes, no TodoWrite. REQUIRED: set FLOWCTL to `plugins/flow-next/scripts/flowctl`, then run `$FLOWCTL show <EPIC_ID> --json` and `$FLOWCTL cat <EPIC_ID>`. Review for completeness, feasibility, clarity, architecture, risks (incl security), scope, and testability. End with exactly one verdict tag: <verdict>SHIP</verdict> or <verdict>NEEDS_WORK</verdict> or <verdict>MAJOR_RETHINK</verdict>.",
   "subagent_type": "opencode-reviewer"
 }
 ```

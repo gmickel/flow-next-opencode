@@ -537,7 +537,7 @@ try:
                     out.append(text)
                 continue
 
-            # Claude stream-json (fallback)
+            # OpenCode stream-json (fallback)
             if ev.get("type") == "assistant":
                 msg = ev.get("message") or {}
                 for blk in (msg.get("content") or []):

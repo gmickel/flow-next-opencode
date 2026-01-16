@@ -73,13 +73,13 @@ Include:
 
 ### Step 3: Execute review (subagent)
 
-Use the **task** tool with subagent_type `opencode-reviewer`. The reviewer must gather context itself via tools.
+Use the **task** tool with subagent_type `opencode-reviewer`. The reviewer must gather context itself via tools, including Flow task/epic specs.
 
 **Task tool call** (example):
 ```json
 {
   "description": "Impl review",
-  "prompt": "You are the OpenCode reviewer. Review current branch vs main. Rules: no questions, no code changes, no TodoWrite. Use bash/read to gather context. REQUIRED: run `git log main..HEAD --oneline`, `git diff main..HEAD --stat`, and `git diff main..HEAD`. Read any changed files needed for correctness. Then output issues grouped by severity and end with exactly one verdict tag: <verdict>SHIP</verdict> or <verdict>NEEDS_WORK</verdict> or <verdict>MAJOR_RETHINK</verdict>.",
+  "prompt": "You are the OpenCode reviewer. Review current branch vs main. Rules: no questions, no code changes, no TodoWrite. REQUIRED: set FLOWCTL to `plugins/flow-next/scripts/flowctl`, then run `$FLOWCTL show <TASK_ID> --json` and `$FLOWCTL cat <TASK_ID>`. Then get epic id from task JSON and run `$FLOWCTL show <EPIC_ID> --json` and `$FLOWCTL cat <EPIC_ID>`. REQUIRED: run `git log main..HEAD --oneline` (fallback master), `git diff main..HEAD --stat`, `git diff main..HEAD`. Read any changed files needed for correctness. Then output issues grouped by severity and end with exactly one verdict tag: <verdict>SHIP</verdict> or <verdict>NEEDS_WORK</verdict> or <verdict>MAJOR_RETHINK</verdict>.",
   "subagent_type": "opencode-reviewer"
 }
 ```

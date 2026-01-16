@@ -171,6 +171,9 @@ After step 5, run the smoke command from epic spec's "Quick commands" section.
    $FLOWCTL done <task-id> --summary-file <summary.md> --evidence-json <evidence.json> --json
    ```
 
+   **FORBIDDEN**: `flowctl task edit` (no such command).  
+   If you need to update task text, edit the markdown file directly and use `flowctl done` with summary/evidence.
+
    Verify the task is actually marked done:
    ```bash
    $FLOWCTL show <task-id> --json
