@@ -97,11 +97,10 @@ fi
 5. **Re-reviews MUST stay in SAME chat** - omit `--new-chat` after first review
 
 **For opencode backend:**
-1. Use the task tool with `subagent_type: opencode-reviewer`
-2. Provide full diff context (git log + changed files + diff) and focus areas
-3. Parse verdict from `<verdict>...` tag
-4. If `REVIEW_RECEIPT_PATH` set: write receipt JSON with `mode: "opencode"`
-5. **Re-reviews must reuse the same task session**: capture `session_id` from `<task_metadata>` and pass it back via `session_id` on subsequent task tool calls
+1. Use `flowctl opencode impl-review` (deterministic CLI wrapper)
+2. Parse verdict from `VERDICT` or JSON output
+3. If `REVIEW_RECEIPT_PATH` set: flowctl writes receipt JSON with `mode: "opencode"`
+4. Re-reviews: re-run the same command (no session_id reuse)
 
 **For all backends:**
 - If `REVIEW_RECEIPT_PATH` set: write receipt after review (any verdict)
@@ -157,11 +156,11 @@ Build a review prompt with:
 - Review criteria (correctness, security, performance, tests, risks)
 - Required verdict tag
 
-Run reviewer subagent using the task tool:
-- subagent_type: `opencode-reviewer`
-- prompt: `<review prompt>`
-
-Parse verdict from reviewer response (`<verdict>SHIP|NEEDS_WORK|MAJOR_RETHINK</verdict>`).
+Run review via flowctl:
+```bash
+$FLOWCTL opencode impl-review "$TASK_ID" --base "$BASE_BRANCH" --receipt "$RECEIPT_PATH" --json
+```
+Parse verdict from JSON (`.verdict`).
 
 On NEEDS_WORK: fix code, commit, re-run review (same backend).
 

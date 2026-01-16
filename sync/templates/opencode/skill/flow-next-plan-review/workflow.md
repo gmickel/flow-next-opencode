@@ -67,13 +67,17 @@ Include:
 
 ### Step 3: Execute review
 
-Use the task tool:
-- subagent_type: `opencode-reviewer`
-- prompt: `<review prompt>`
+Run OpenCode review via flowctl (deterministic, supports receipts):
 
-Capture `session_id` from the `<task_metadata>` block in the tool output and reuse it for any re-review by passing `session_id` back into the task tool. This keeps the same subagent chat.
+```bash
+EPIC_ID="${1:-}"
+RECEIPT_PATH="${REVIEW_RECEIPT_PATH:-/tmp/plan-review-receipt.json}"
 
-**Output must include** `<verdict>SHIP</verdict>` or `<verdict>NEEDS_WORK</verdict>` or `<verdict>MAJOR_RETHINK</verdict>`.
+REVIEW_JSON="$($FLOWCTL opencode plan-review "$EPIC_ID" --receipt "$RECEIPT_PATH" --json)"
+VERDICT="$(echo "$REVIEW_JSON" | jq -r '.verdict // empty')"
+```
+
+If `VERDICT` is empty, output `<promise>RETRY</promise>` and stop.
 
 ### Step 4: Update Status
 

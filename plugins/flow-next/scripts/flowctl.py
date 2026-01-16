@@ -678,6 +678,14 @@ def require_codex() -> str:
     return codex
 
 
+def require_opencode() -> str:
+    """Ensure opencode CLI is available. Returns path to opencode."""
+    opencode = shutil.which("opencode")
+    if not opencode:
+        error_exit("opencode not found in PATH", use_json=False, code=2)
+    return opencode
+
+
 def get_codex_version() -> Optional[str]:
     """Get codex version, or None if not available."""
     codex = shutil.which("codex")
@@ -794,6 +802,110 @@ def parse_codex_verdict(output: str) -> Optional[str]:
     """
     match = re.search(r"<verdict>(SHIP|NEEDS_WORK|MAJOR_RETHINK)</verdict>", output)
     return match.group(1) if match else None
+
+
+def run_opencode_review(
+    prompt: str,
+    files: Optional[list[str]] = None,
+    title: Optional[str] = None,
+    timeout: int = 600,
+) -> str:
+    """Run opencode review and return output."""
+    opencode = require_opencode()
+    cmd = [opencode, "run", "--agent", "opencode-reviewer"]
+    if title:
+        cmd += ["--title", title]
+    if files:
+        for f in files:
+            cmd += ["--file", f]
+    cmd.append(prompt)
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=timeout,
+        )
+        return result.stdout
+    except subprocess.TimeoutExpired:
+        error_exit("opencode run timed out (600s)", use_json=False, code=2)
+    except subprocess.CalledProcessError as e:
+        msg = (e.stderr or e.stdout or str(e)).strip()
+        error_exit(f"opencode run failed: {msg}", use_json=False, code=2)
+
+
+def build_opencode_impl_prompt(
+    task_spec: str,
+    diff_summary: str,
+    commits: str,
+    files: str,
+    base_branch: str,
+    focus: Optional[str],
+) -> str:
+    focus_block = f"\nFocus: {focus}\n" if focus else ""
+    return f"""Review the attached patch file for implementation changes.
+
+Base branch: {base_branch}
+Commits:
+{commits or '(none)'}
+
+Changed files:
+{files or '(none)'}
+
+Diff summary:
+{diff_summary or '(none)'}
+
+Task spec:
+{task_spec}
+{focus_block}
+Review Criteria:
+1. Correctness
+2. Safety/Security
+3. Performance
+4. Maintainability
+5. Tests
+
+Output Format:
+- Group issues by severity (Blocker/Major/Minor)
+- Include concrete fixes and suggested tests
+
+End with exactly one verdict tag:
+<verdict>SHIP</verdict> or <verdict>NEEDS_WORK</verdict> or <verdict>MAJOR_RETHINK</verdict>
+"""
+
+
+def build_opencode_plan_prompt(
+    plan_summary: str,
+    plan_spec: str,
+    epic_id: str,
+    focus: Optional[str],
+) -> str:
+    focus_block = f"\nFocus: {focus}\n" if focus else ""
+    return f"""Review the attached plan for epic {epic_id}.
+
+Plan summary:
+{plan_summary}
+
+Plan spec:
+{plan_spec}
+{focus_block}
+Review Criteria:
+1. Completeness
+2. Feasibility
+3. Clarity
+4. Architecture
+5. Risks (incl. security)
+6. Scope
+7. Testability
+
+Output Format:
+- Group issues by severity (Blocker/Major/Minor)
+- Include concrete fixes
+
+End with exactly one verdict tag:
+<verdict>SHIP</verdict> or <verdict>NEEDS_WORK</verdict> or <verdict>MAJOR_RETHINK</verdict>
+"""
 
 
 def build_review_prompt(
@@ -4220,6 +4332,179 @@ def cmd_codex_plan_review(args: argparse.Namespace) -> None:
         print(f"\nVERDICT={verdict or 'UNKNOWN'}")
 
 
+def cmd_opencode_impl_review(args: argparse.Namespace) -> None:
+    """Run implementation review via opencode run."""
+    task_id = args.task
+    base_branch = args.base
+    focus = getattr(args, "focus", None)
+
+    standalone = task_id is None
+
+    if not standalone:
+        if not ensure_flow_exists():
+            error_exit(".flow/ does not exist", use_json=args.json)
+        if not is_task_id(task_id):
+            error_exit(f"Invalid task ID: {task_id}", use_json=args.json)
+        flow_dir = get_flow_dir()
+        task_spec_path = flow_dir / TASKS_DIR / f"{task_id}.md"
+        if not task_spec_path.exists():
+            error_exit(f"Task spec not found: {task_spec_path}", use_json=args.json)
+        task_spec = task_spec_path.read_text(encoding="utf-8")
+    else:
+        task_spec = "Standalone review (no task spec)."
+
+    repo_root = get_repo_root()
+    commits = ""
+    files = ""
+    diff_summary = ""
+    try:
+        commits = subprocess.run(
+            ["git", "log", f"{base_branch}..HEAD", "--oneline"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        ).stdout.strip()
+    except subprocess.CalledProcessError:
+        pass
+    try:
+        files = subprocess.run(
+            ["git", "diff", f"{base_branch}..HEAD", "--name-only"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        ).stdout.strip()
+    except subprocess.CalledProcessError:
+        pass
+    try:
+        diff_summary = subprocess.run(
+            ["git", "diff", "--stat", base_branch],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        ).stdout.strip()
+    except subprocess.CalledProcessError:
+        pass
+
+    # Write patch file
+    patch_path = f"/tmp/impl-review-{base_branch}..HEAD.patch"
+    try:
+        patch = subprocess.run(
+            ["git", "diff", f"{base_branch}..HEAD"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            check=True,
+        ).stdout
+        Path(patch_path).write_text(patch, encoding="utf-8")
+    except subprocess.CalledProcessError:
+        Path(patch_path).write_text("", encoding="utf-8")
+
+    prompt = build_opencode_impl_prompt(
+        task_spec=task_spec,
+        diff_summary=diff_summary,
+        commits=commits,
+        files=files,
+        base_branch=base_branch,
+        focus=focus,
+    )
+
+    title = f"Impl Review: {task_id or 'branch'}"
+    output = run_opencode_review(prompt, files=[patch_path], title=title)
+    verdict = parse_codex_verdict(output)
+
+    review_id = task_id if task_id else "branch"
+    receipt_path = args.receipt if hasattr(args, "receipt") and args.receipt else None
+    if receipt_path:
+        receipt_data = {
+            "type": "impl_review",
+            "id": review_id,
+            "mode": "opencode",
+            "base": base_branch,
+            "verdict": verdict,
+            "timestamp": now_iso(),
+            "review": output,
+        }
+        if focus:
+            receipt_data["focus"] = focus
+        Path(receipt_path).write_text(
+            json.dumps(receipt_data, indent=2) + "\n", encoding="utf-8"
+        )
+
+    if args.json:
+        json_output(
+            {
+                "type": "impl_review",
+                "id": review_id,
+                "verdict": verdict,
+                "mode": "opencode",
+                "standalone": standalone,
+                "review": output,
+            }
+        )
+    else:
+        print(output)
+        print(f"\nVERDICT={verdict or 'UNKNOWN'}")
+
+
+def cmd_opencode_plan_review(args: argparse.Namespace) -> None:
+    """Run plan review via opencode run."""
+    if not ensure_flow_exists():
+        error_exit(".flow/ does not exist", use_json=args.json)
+
+    epic_id = args.epic
+    focus = getattr(args, "focus", None)
+
+    if not is_epic_id(epic_id):
+        error_exit(f"Invalid epic ID: {epic_id}", use_json=args.json)
+
+    flow_dir = get_flow_dir()
+    epic_json_path = flow_dir / EPICS_DIR / f"{epic_id}.json"
+    epic_spec_path = flow_dir / SPECS_DIR / f"{epic_id}.md"
+    plan_summary = epic_json_path.read_text(encoding="utf-8") if epic_json_path.exists() else ""
+    plan_spec = epic_spec_path.read_text(encoding="utf-8") if epic_spec_path.exists() else ""
+
+    prompt = build_opencode_plan_prompt(
+        plan_summary=plan_summary,
+        plan_spec=plan_spec,
+        epic_id=epic_id,
+        focus=focus,
+    )
+
+    title = f"Plan Review: {epic_id}"
+    output = run_opencode_review(prompt, title=title)
+    verdict = parse_codex_verdict(output)
+
+    receipt_path = args.receipt if hasattr(args, "receipt") and args.receipt else None
+    if receipt_path:
+        receipt_data = {
+            "type": "plan_review",
+            "id": epic_id,
+            "mode": "opencode",
+            "verdict": verdict,
+            "timestamp": now_iso(),
+            "review": output,
+        }
+        if focus:
+            receipt_data["focus"] = focus
+        Path(receipt_path).write_text(
+            json.dumps(receipt_data, indent=2) + "\n", encoding="utf-8"
+        )
+
+    if args.json:
+        json_output(
+            {
+                "type": "plan_review",
+                "id": epic_id,
+                "verdict": verdict,
+                "mode": "opencode",
+                "review": output,
+            }
+        )
+    else:
+        print(output)
+        print(f"\nVERDICT={verdict or 'UNKNOWN'}")
+
+
 # --- Checkpoint commands ---
 
 
@@ -4990,6 +5275,33 @@ def main() -> None:
     )
     p_codex_plan.add_argument("--json", action="store_true", help="JSON output")
     p_codex_plan.set_defaults(func=cmd_codex_plan_review)
+
+    # opencode (OpenCode CLI wrappers)
+    p_opencode = subparsers.add_parser("opencode", help="OpenCode CLI helpers")
+    opencode_sub = p_opencode.add_subparsers(dest="opencode_cmd", required=True)
+
+    p_opencode_impl = opencode_sub.add_parser("impl-review", help="Implementation review")
+    p_opencode_impl.add_argument(
+        "task",
+        nargs="?",
+        default=None,
+        help="Task ID (fn-N.M), optional for standalone",
+    )
+    p_opencode_impl.add_argument("--base", required=True, help="Base branch for diff")
+    p_opencode_impl.add_argument(
+        "--focus", help="Focus areas for standalone review (comma-separated)"
+    )
+    p_opencode_impl.add_argument(
+        "--receipt", help="Receipt file path for session continuity"
+    )
+    p_opencode_impl.add_argument("--json", action="store_true", help="JSON output")
+    p_opencode_impl.set_defaults(func=cmd_opencode_impl_review)
+
+    p_opencode_plan = opencode_sub.add_parser("plan-review", help="Plan review")
+    p_opencode_plan.add_argument("epic", help="Epic ID (fn-N)")
+    p_opencode_plan.add_argument("--receipt", help="Receipt file path for session continuity")
+    p_opencode_plan.add_argument("--json", action="store_true", help="JSON output")
+    p_opencode_plan.set_defaults(func=cmd_opencode_plan_review)
 
     args = parser.parse_args()
     args.func(args)

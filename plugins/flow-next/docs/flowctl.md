@@ -7,7 +7,7 @@ CLI for `.flow/` task tracking. Agents must use flowctl for all writes.
 ## Available Commands
 
 ```
-init, detect, epic, task, dep, show, epics, tasks, list, cat, ready, next, start, done, block, validate, config, memory, prep-chat, rp, codex, checkpoint, status
+init, detect, epic, task, dep, show, epics, tasks, list, cat, ready, next, start, done, block, validate, config, memory, prep-chat, rp, opencode, codex, checkpoint, status
 ```
 
 ## Multi-User Safety
@@ -375,7 +375,7 @@ flowctl config get review.backend [--json]
 
 # Set a config value
 flowctl config set memory.enabled true [--json]
-flowctl config set review.backend codex [--json]  # rp, codex, or none
+flowctl config set review.backend opencode [--json]  # rp, opencode, or none
 
 # Toggle boolean config
 flowctl config toggle memory.enabled [--json]
@@ -386,7 +386,7 @@ flowctl config toggle memory.enabled [--json]
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `memory.enabled` | bool | `false` | Enable memory system |
-| `review.backend` | string | auto | Default review backend (`rp`, `codex`, `none`) |
+| `review.backend` | string | auto | Default review backend (`rp`, `opencode`, `none`) |
 
 Auto-detect priority: `FLOW_REVIEW_BACKEND` env → config → available CLI.
 
@@ -463,9 +463,42 @@ flowctl rp chat-send --window "$W" --tab "$T" --message-file /tmp/review-prompt.
 flowctl rp prompt-export --window "$W" --tab "$T" --out /tmp/export.md
 ```
 
+### opencode
+
+OpenCode CLI wrappers (default for reviews in this port).
+
+**Requirements:**
+```bash
+opencode --version
+```
+
+**Model:** Uses the `opencode-reviewer` agent defined in `.opencode/opencode.json`.
+
+**Commands:**
+```bash
+# Implementation review (reviews code changes for a task)
+flowctl opencode impl-review <task-id> --base <branch> [--receipt <path>] [--json]
+# Example: flowctl opencode impl-review fn-1.3 --base main --receipt /tmp/impl-fn-1.3.json
+
+# Plan review (reviews epic spec before implementation)
+flowctl opencode plan-review <epic-id> [--receipt <path>] [--json]
+# Example: flowctl opencode plan-review fn-1 --receipt /tmp/plan-fn-1.json
+```
+
+**Receipt schema (Ralph-compatible):**
+```json
+{
+  "type": "impl_review",
+  "id": "fn-1.3",
+  "mode": "opencode",
+  "verdict": "SHIP",
+  "timestamp": "2026-01-16T01:23:45Z"
+}
+```
+
 ### codex
 
-OpenAI Codex CLI wrappers — cross-platform alternative to RepoPrompt.
+OpenAI Codex CLI wrappers — legacy alternative to RepoPrompt.
 
 **Requirements:**
 ```bash
