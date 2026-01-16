@@ -126,6 +126,67 @@ flowctl ready --epic fn-1
 /flow-next:work fn-1
 ```
 
+### When to Use What
+
+Flow-Next is flexible. There’s no single “correct” order — the right sequence depends on how well-defined your spec already is.
+
+**The key question: How fleshed out is your idea?**
+
+#### Vague idea or rough concept
+
+```
+Interview → Plan → Work
+```
+
+1. **Interview first** — `/flow-next:interview "your rough idea"` asks deep questions to surface requirements, edge cases, and decisions you haven’t thought about
+2. **Plan** — `/flow-next:plan fn-1` researches best practices, current docs, repo patterns, then splits into properly-sized tasks
+3. **Work** — `/flow-next:work fn-1` executes with re-anchoring and reviews
+
+#### Well-written spec or PRD
+
+```
+Plan → Interview → Work
+```
+
+1. **Plan first** — `/flow-next:plan specs/my-feature.md` researches best practices and current patterns, then breaks your spec into epic + tasks
+2. **Interview after** — `/flow-next:interview fn-1` runs deep questions against the plan to catch edge cases, missing requirements, or assumptions
+3. **Work** — `/flow-next:work fn-1` executes
+
+#### Minimal planning
+
+```
+Plan → Work
+```
+
+Skip interview entirely for well-understood changes. Plan still researches best practices and splits into tasks.
+
+#### Quick single-task (spec already complete)
+
+```
+Work directly
+```
+
+```bash
+/flow-next:work specs/small-fix.md
+```
+
+For small, self-contained changes where you already have a complete spec. Creates an epic with **one task** and executes immediately. You get flow tracking, re-anchoring, and optional review — without full planning overhead.
+
+Best for: bug fixes, small features, well-scoped changes that don’t need task splitting.
+
+**Note:** This does NOT split into multiple tasks. For detailed specs that need breakdown, use Plan first.
+
+**Summary:**
+
+| Starting point | Recommended sequence |
+|----------------|---------------------|
+| Vague idea, rough notes | Interview → Plan → Work |
+| Detailed spec/PRD | Plan → Interview → Work |
+| Well-understood, needs task splitting | Plan → Work |
+| Small single-task, spec complete | Work directly (creates 1 epic + 1 task) |
+
+You can always run interview again after planning to catch anything missed. Interview writes back to the spec, so iterations refine rather than replace.
+
 ---
 
 ## Human-in-the-Loop Workflow (Detailed)
