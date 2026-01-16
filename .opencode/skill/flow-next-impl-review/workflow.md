@@ -71,18 +71,22 @@ Include:
 - Review criteria (correctness, security, performance, tests, risks)
 - Required verdict tag
 
-### Step 3: Execute review
+### Step 3: Execute review (subagent)
 
-Run OpenCode review via flowctl (deterministic, supports receipts):
+Use the **task** tool with subagent_type `opencode-reviewer`. The reviewer must gather context itself via tools.
 
-```bash
-TASK_ID="${1:-}"
-BASE_BRANCH="main"
-RECEIPT_PATH="${REVIEW_RECEIPT_PATH:-/tmp/impl-review-receipt.json}"
-
-REVIEW_JSON="$($FLOWCTL opencode impl-review "$TASK_ID" --base "$BASE_BRANCH" --receipt "$RECEIPT_PATH" --json)"
-VERDICT="$(echo "$REVIEW_JSON" | jq -r '.verdict // empty')"
+**Task tool call** (example):
+```json
+{
+  "description": "Impl review",
+  "prompt": "You are the OpenCode reviewer. Review current branch vs main. Rules: no questions, no code changes, no TodoWrite. Use bash/read to gather context. REQUIRED: run `git log main..HEAD --oneline`, `git diff main..HEAD --stat`, and `git diff main..HEAD`. Read any changed files needed for correctness. Then output issues grouped by severity and end with exactly one verdict tag: <verdict>SHIP</verdict> or <verdict>NEEDS_WORK</verdict> or <verdict>MAJOR_RETHINK</verdict>.",
+  "subagent_type": "opencode-reviewer"
+}
 ```
+
+**After the task completes**:
+- Parse `VERDICT` from the subagent output.
+- Extract `session_id` from the `<task_metadata>` block (used for re-reviews).
 
 If `VERDICT` is empty, output `<promise>RETRY</promise>` and stop.
 
@@ -103,7 +107,7 @@ EOF
 If `VERDICT=NEEDS_WORK`:
 1. Parse issues from output
 2. Fix code, commit, run tests
-3. Re-run Step 3 (same backend, same `session_id`)
+3. Re-run Step 3 **with the same task session_id** (pass `session_id` to the task tool)
 4. Repeat until SHIP
 
 ---

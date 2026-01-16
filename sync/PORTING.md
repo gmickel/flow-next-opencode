@@ -94,6 +94,7 @@ Keep these in mind when porting; they explain why our layout is the way it is:
 - Ralph runner agent = `ralph-runner` with model set in `.opencode/opencode.json`.
 - Subagents keep tools locked down (`write/edit/patch/multiedit: false`).
 - Re-review loops must reuse `session_id` for subagent continuity (OpenCode task tool).
+- OpenCode review uses **task tool + subagent** (`opencode-reviewer`). Do not use `opencode run` for reviews.
 
 ## Where to Patch (if required)
 

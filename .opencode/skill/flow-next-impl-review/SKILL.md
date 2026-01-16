@@ -97,10 +97,10 @@ fi
 5. **Re-reviews MUST stay in SAME chat** - omit `--new-chat` after first review
 
 **For opencode backend:**
-1. Use `flowctl opencode impl-review` (deterministic CLI wrapper)
-2. Parse verdict from `VERDICT` or JSON output
-3. If `REVIEW_RECEIPT_PATH` set: flowctl writes receipt JSON with `mode: "opencode"`
-4. Re-reviews: re-run the same command (no session_id reuse)
+1. Use the **task tool** with subagent_type `opencode-reviewer`
+2. Reviewer gathers context via tools (git diff/log, read files)
+3. Parse verdict from reviewer output
+4. Extract `session_id` from `<task_metadata>` and reuse it for re-reviews
 
 **For all backends:**
 - If `REVIEW_RECEIPT_PATH` set: write receipt after review (any verdict)
@@ -135,32 +135,18 @@ Run backend detection from SKILL.md above. Then branch:
 
 ### OpenCode Backend
 
-```bash
-TASK_ID="${1:-}"
-BASE_BRANCH="main"
-RECEIPT_PATH="${REVIEW_RECEIPT_PATH:-/tmp/impl-review-receipt.json}"
+Use the task tool with subagent_type `opencode-reviewer`.
 
-# Identify changes
-git branch --show-current
-git log main..HEAD --oneline 2>/dev/null || git log master..HEAD --oneline
-git diff main..HEAD --name-only 2>/dev/null || git diff master..HEAD --name-only
-DIFF_OUTPUT="$(git diff main..HEAD 2>/dev/null || git diff master..HEAD)"
-```
+Prompt must require:
+- `git log main..HEAD --oneline`
+- `git diff main..HEAD --stat`
+- `git diff main..HEAD`
+- Read any changed files needed for correctness
+- No questions, no code changes, no TodoWrite
+- End with `<verdict>SHIP</verdict>` or `<verdict>NEEDS_WORK</verdict>` or `<verdict>MAJOR_RETHINK</verdict>`
 
-Build a review prompt with:
-- Branch + base branch
-- Commit list
-- Changed files
-- Full diff (or a focused diff if huge)
-- Focus areas from arguments
-- Review criteria (correctness, security, performance, tests, risks)
-- Required verdict tag
-
-Run review via flowctl:
-```bash
-$FLOWCTL opencode impl-review "$TASK_ID" --base "$BASE_BRANCH" --receipt "$RECEIPT_PATH" --json
-```
-Parse verdict from JSON (`.verdict`).
+Parse verdict from the subagent response.
+Extract `session_id` from `<task_metadata>` and reuse for re-review.
 
 On NEEDS_WORK: fix code, commit, re-run review (same backend).
 

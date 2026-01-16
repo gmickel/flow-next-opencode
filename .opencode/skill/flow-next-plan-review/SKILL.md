@@ -97,10 +97,10 @@ fi
 5. **Re-reviews MUST stay in SAME chat** - omit `--new-chat` after first review
 
 **For opencode backend:**
-1. Use `flowctl opencode plan-review` (deterministic CLI wrapper)
-2. Parse verdict from `VERDICT` or JSON output
-3. If `REVIEW_RECEIPT_PATH` set: flowctl writes receipt JSON with `mode: "opencode"`
-4. Re-reviews: re-run the same command (no session_id reuse)
+1. Use the **task tool** with subagent_type `opencode-reviewer`
+2. Reviewer gathers context via tools (`flowctl show/cat`)
+3. Parse verdict from reviewer output
+4. Extract `session_id` from `<task_metadata>` and reuse it for re-reviews
 
 **For all backends:**
 - If `REVIEW_RECEIPT_PATH` set: write receipt after review (any verdict)
@@ -133,30 +133,18 @@ Run backend detection from SKILL.md above. Then branch:
 
 ### OpenCode Backend
 
-```bash
-EPIC_ID="${1:-}"
-RECEIPT_PATH="${REVIEW_RECEIPT_PATH:-/tmp/plan-review-receipt.json}"
+Use the task tool with subagent_type `opencode-reviewer`.
 
-# Gather plan content
-PLAN_SUMMARY="$($FLOWCTL show "$EPIC_ID" --json)"
-PLAN_SPEC="$($FLOWCTL cat "$EPIC_ID")"
-```
+Prompt must require:
+- `flowctl show <EPIC_ID> --json`
+- `flowctl cat <EPIC_ID>`
+- No questions, no code changes, no TodoWrite
+- End with `<verdict>SHIP</verdict>` or `<verdict>NEEDS_WORK</verdict>` or `<verdict>MAJOR_RETHINK</verdict>`
 
-Build a review prompt with:
-- Plan summary + spec
-- Focus areas from arguments
-- Review criteria (completeness, feasibility, clarity, architecture, risks, scope, testability)
-- Required verdict tag
-
-Run review via flowctl:
-```bash
-$FLOWCTL opencode plan-review "$EPIC_ID" --receipt "$RECEIPT_PATH" --json
-```
-Parse verdict from JSON (`.verdict`).
+Parse verdict from the subagent response.
+Extract `session_id` from `<task_metadata>` and reuse for re-review.
 
 On NEEDS_WORK: fix plan via `$FLOWCTL epic set-plan`, then re-run review (same backend).
-
-Receipt is written by `flowctl opencode plan-review` when `--receipt` is provided.
 
 ### RepoPrompt Backend
 

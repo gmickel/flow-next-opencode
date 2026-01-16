@@ -812,6 +812,7 @@ def run_opencode_review(
 ) -> str:
     """Run opencode review and return output."""
     opencode = require_opencode()
+    message = "Review attached prompt and patch. End with a single <verdict> tag."
     cmd = [opencode, "run", "--agent", "opencode-reviewer"]
     if title:
         cmd += ["--title", title]
@@ -819,7 +820,6 @@ def run_opencode_review(
         for f in files:
             cmd += ["--file", f]
     cmd += ["--file", prompt_file]
-    cmd.append("Review attached prompt and patch. End with a single <verdict> tag.")
     try:
         result = subprocess.run(
             cmd,
@@ -827,6 +827,7 @@ def run_opencode_review(
             text=True,
             check=True,
             timeout=timeout,
+            input=message,
         )
         return result.stdout
     except subprocess.TimeoutExpired:
@@ -4387,7 +4388,8 @@ def cmd_opencode_impl_review(args: argparse.Namespace) -> None:
         pass
 
     # Write patch file
-    patch_path = f"/tmp/impl-review-{base_branch}..HEAD.patch"
+    # OpenAI input name pattern disallows dots; use safe filenames.
+    patch_path = "/tmp/flow-next-impl-review-patch"
     try:
         patch = subprocess.run(
             ["git", "diff", f"{base_branch}..HEAD"],
@@ -4408,7 +4410,7 @@ def cmd_opencode_impl_review(args: argparse.Namespace) -> None:
         base_branch=base_branch,
         focus=focus,
     )
-    prompt_path = f"/tmp/impl-review-{base_branch}..HEAD.prompt.md"
+    prompt_path = "/tmp/flow-next-impl-review-prompt"
     Path(prompt_path).write_text(prompt, encoding="utf-8")
 
     title = f"Impl Review: {task_id or 'branch'}"
@@ -4472,7 +4474,8 @@ def cmd_opencode_plan_review(args: argparse.Namespace) -> None:
         epic_id=epic_id,
         focus=focus,
     )
-    prompt_path = f"/tmp/plan-review-{epic_id}.prompt.md"
+    # OpenAI input name pattern disallows dots; use safe filename.
+    prompt_path = "/tmp/flow-next-plan-review-prompt"
     Path(prompt_path).write_text(prompt, encoding="utf-8")
 
     title = f"Plan Review: {epic_id}"
