@@ -438,19 +438,13 @@ Ralph includes plugin hooks that enforce workflow rules deterministically.
 | Required flags on setup/select-add | Ensures proper window/tab targeting (rp) |
 | Track codex review verdicts | Validates codex review completed successfully |
 
-### Hook location
+### Guard plugin location (OpenCode)
 
 ```
-plugins/flow-next/
-  hooks/hooks.json              # Hook config
-  scripts/hooks/ralph-guard.py  # Guard logic
+.opencode/plugin/flow-next-ralph-guard.ts
 ```
 
-### Disabling hooks
-
-Temporarily: unset `FLOW_RALPH` or remove `hooks/hooks.json`.
-
-Permanently: delete `hooks/` directory and remove `"hooks"` from `plugin.json`.
+Disable by removing the file from `.opencode/plugin/` (OpenCode only).
 
 ---
 
@@ -533,6 +527,3 @@ flowctl show fn-1.1 --json | jq '.evidence.commits'
 
 - [flowctl CLI reference](flowctl.md)
 - [Flow-Next README](../README.md)
-- Test scripts:
-  - Full: `plugins/flow-next/scripts/ralph_e2e_rp_test.sh`
-  - Short (2 tasks): `plugins/flow-next/scripts/ralph_e2e_short_rp_test.sh`

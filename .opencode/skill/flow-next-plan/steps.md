@@ -26,8 +26,8 @@
 ```bash
 # Get flowctl path
 ROOT="$(git rev-parse --show-toplevel)"
-PLUGIN_ROOT="$ROOT/plugins/flow-next"
-FLOWCTL="$PLUGIN_ROOT/scripts/flowctl"
+OPENCODE_DIR="$ROOT/.opencode"
+FLOWCTL="$OPENCODE_DIR/bin/flowctl"
 
 # Ensure .flow exists
 $FLOWCTL init --json

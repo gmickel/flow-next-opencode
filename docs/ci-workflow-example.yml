@@ -24,8 +24,8 @@ jobs:
         run: |
           # Download flowctl (adjust path/method for your setup)
           # Option 1: If flowctl is in repo
-          # python3 ./scripts/flowctl.py validate --all --json
+          python3 ./.opencode/bin/flowctl.py validate --all --json
 
-          # Option 2: Download from plugin (example)
-          curl -sL https://raw.githubusercontent.com/gmickel/gmickel-claude-marketplace/main/plugins/flow-next/scripts/flowctl.py -o flowctl.py
-          python3 flowctl.py validate --all --json
+          # Option 2: Download from this repo (example)
+          # curl -sL https://raw.githubusercontent.com/gmickel/flow-next-opencode/main/.opencode/bin/flowctl.py -o flowctl.py
+          # python3 flowctl.py validate --all --json

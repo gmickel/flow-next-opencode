@@ -72,5 +72,5 @@ Task tracking for AI agents. All state lives in `.flow/`.
 
 ## More Info
 
-- Human docs: https://github.com/gmickel/gmickel-claude-marketplace/blob/main/plugins/flow-next/docs/flowctl.md
+- Human docs: docs/flowctl.md
 - CLI reference: `.flow/bin/flowctl --help`

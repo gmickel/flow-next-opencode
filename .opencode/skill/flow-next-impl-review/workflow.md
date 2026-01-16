@@ -15,8 +15,8 @@ The reviewer model only sees provided context. RepoPrompt's Builder discovers co
 ```bash
 set -e
 ROOT="$(git rev-parse --show-toplevel)"
-PLUGIN_ROOT="$ROOT/plugins/flow-next"
-FLOWCTL="$PLUGIN_ROOT/scripts/flowctl"
+OPENCODE_DIR="$ROOT/.opencode"
+FLOWCTL="$OPENCODE_DIR/bin/flowctl"
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 # Check available backends
@@ -79,7 +79,7 @@ Use the **task** tool with subagent_type `opencode-reviewer`. The reviewer must 
 ```json
 {
   "description": "Impl review",
-  "prompt": "You are the OpenCode reviewer. Review current branch vs main. Rules: no questions, no code changes, no TodoWrite. REQUIRED: set FLOWCTL to `plugins/flow-next/scripts/flowctl`, then run `$FLOWCTL show <TASK_ID> --json` and `$FLOWCTL cat <TASK_ID>`. Then get epic id from task JSON and run `$FLOWCTL show <EPIC_ID> --json` and `$FLOWCTL cat <EPIC_ID>`. REQUIRED: run `git log main..HEAD --oneline` (fallback master), `git diff main..HEAD --stat`, `git diff main..HEAD`. Read any changed files needed for correctness. Then output issues grouped by severity and end with exactly one verdict tag: <verdict>SHIP</verdict> or <verdict>NEEDS_WORK</verdict> or <verdict>MAJOR_RETHINK</verdict>.",
+  "prompt": "You are the OpenCode reviewer. Review current branch vs main. Rules: no questions, no code changes, no TodoWrite. REQUIRED: set FLOWCTL to `.opencode/bin/flowctl`, then run `$FLOWCTL show <TASK_ID> --json` and `$FLOWCTL cat <TASK_ID>`. Then get epic id from task JSON and run `$FLOWCTL show <EPIC_ID> --json` and `$FLOWCTL cat <EPIC_ID>`. REQUIRED: run `git log main..HEAD --oneline` (fallback master), `git diff main..HEAD --stat`, `git diff main..HEAD`. Read any changed files needed for correctness. Then output issues grouped by severity and end with exactly one verdict tag: <verdict>SHIP</verdict> or <verdict>NEEDS_WORK</verdict> or <verdict>MAJOR_RETHINK</verdict>.",
   "subagent_type": "opencode-reviewer"
 }
 ```

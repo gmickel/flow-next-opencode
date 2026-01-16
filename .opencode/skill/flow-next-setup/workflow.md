@@ -2,13 +2,14 @@
 
 Follow these steps in order. This workflow is **idempotent** - safe to re-run.
 
-## Step 0: Resolve plugin path
+## Step 0: Resolve OpenCode path
 
-Use repo-local plugin root:
+Use repo-local OpenCode root:
 
 ```bash
 ROOT="$(git rev-parse --show-toplevel)"
-PLUGIN_ROOT="$ROOT/plugins/flow-next"
+OPENCODE_DIR="$ROOT/.opencode"
+VERSION_FILE="$OPENCODE_DIR/version"
 ```
 
 ## Step 1: Check .flow/ exists
@@ -32,12 +33,15 @@ fi
 
 Read `.flow/meta.json` and check for `setup_version` field.
 
-Also read `${PLUGIN_ROOT}/.claude-plugin/plugin.json` to get current plugin version.
+Also read `${VERSION_FILE}` to get current version (fallback `unknown`):
+```bash
+OPENCODE_VERSION="$(cat "$VERSION_FILE" 2>/dev/null || echo "unknown")"
+```
 
 **If `setup_version` exists (already set up):**
-- If **same version**: ask with the **question** tool:
+- If **same version as `OPENCODE_VERSION`**: ask with the **question** tool:
   - **Header**: `Update Docs`
-  - **Question**: `Already set up with v<VERSION>. Update docs only?`
+  - **Question**: `Already set up with v<OPENCODE_VERSION>. Update docs only?`
   - **Options**:
     1. `Yes, update docs`
     2. `No, exit`
@@ -60,8 +64,8 @@ mkdir -p .flow/bin
 Copy using Bash `cp` with absolute paths:
 
 ```bash
-cp "${PLUGIN_ROOT}/scripts/flowctl" .flow/bin/flowctl
-cp "${PLUGIN_ROOT}/scripts/flowctl.py" .flow/bin/flowctl.py
+cp "${OPENCODE_DIR}/bin/flowctl" .flow/bin/flowctl
+cp "${OPENCODE_DIR}/bin/flowctl.py" .flow/bin/flowctl.py
 chmod +x .flow/bin/flowctl
 ```
 
@@ -73,7 +77,7 @@ Read current `.flow/meta.json`, add/update these fields (preserve all others):
 
 ```json
 {
-  "setup_version": "<PLUGIN_VERSION>",
+  "setup_version": "<OPENCODE_VERSION>",
   "setup_date": "<ISO_DATE>"
 }
 ```
@@ -121,7 +125,7 @@ Wait for response, then for each chosen file:
 Flow-Next setup complete!
 
 Installed:
-- .flow/bin/flowctl (v<VERSION>)
+- .flow/bin/flowctl (v<OPENCODE_VERSION>)
 - .flow/bin/flowctl.py
 - .flow/usage.md
 
@@ -136,7 +140,7 @@ Memory system: disabled by default
 Enable with: flowctl config set memory.enabled true
 
 Notes:
-- Re-run /flow-next:setup after plugin updates to refresh scripts
+- Re-run /flow-next:setup after .opencode updates to refresh scripts
 - Uninstall: rm -rf .flow/bin .flow/usage.md and remove <!-- BEGIN/END FLOW-NEXT --> block from docs
 ```
 

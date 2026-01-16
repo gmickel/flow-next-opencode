@@ -12,8 +12,8 @@ Build RepoPrompt context and export to a markdown file for use with external LLM
 **CRITICAL: flowctl is BUNDLED — NOT installed globally.** `which flowctl` will fail (expected). Always use:
 ```bash
 ROOT="$(git rev-parse --show-toplevel)"
-PLUGIN_ROOT="$ROOT/plugins/flow-next"
-FLOWCTL="$PLUGIN_ROOT/scripts/flowctl"
+OPENCODE_DIR="$ROOT/.opencode"
+FLOWCTL="$OPENCODE_DIR/bin/flowctl"
 $FLOWCTL <command>
 ```
 
@@ -34,8 +34,8 @@ Examples:
 
 ```bash
 ROOT="$(git rev-parse --show-toplevel)"
-PLUGIN_ROOT="$ROOT/plugins/flow-next"
-FLOWCTL="$PLUGIN_ROOT/scripts/flowctl"
+OPENCODE_DIR="$ROOT/.opencode"
+FLOWCTL="$OPENCODE_DIR/bin/flowctl"
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ```
 

@@ -12,8 +12,8 @@ Conduct an extremely thorough interview about a task/spec and write refined deta
 **CRITICAL: flowctl is BUNDLED — NOT installed globally.** `which flowctl` will fail (expected). Always use:
 ```bash
 ROOT="$(git rev-parse --show-toplevel)"
-PLUGIN_ROOT="$ROOT/plugins/flow-next"
-FLOWCTL="$PLUGIN_ROOT/scripts/flowctl"
+OPENCODE_DIR="$ROOT/.opencode"
+FLOWCTL="$OPENCODE_DIR/bin/flowctl"
 $FLOWCTL <command>
 ```
 
@@ -41,8 +41,8 @@ If empty, ask: "What should I interview you about? Give me a Flow ID (e.g., fn-1
 
 ```bash
 ROOT="$(git rev-parse --show-toplevel)"
-PLUGIN_ROOT="$ROOT/plugins/flow-next"
-FLOWCTL="$PLUGIN_ROOT/scripts/flowctl"
+OPENCODE_DIR="$ROOT/.opencode"
+FLOWCTL="$OPENCODE_DIR/bin/flowctl"
 ```
 
 ## Detect Input Type

@@ -13,8 +13,8 @@ Quick task operations in `.flow/`. For planning features use `/flow-next:plan`, 
 
 ```bash
 ROOT="$(git rev-parse --show-toplevel)"
-PLUGIN_ROOT="$ROOT/plugins/flow-next"
-FLOWCTL="$PLUGIN_ROOT/scripts/flowctl"
+OPENCODE_DIR="$ROOT/.opencode"
+FLOWCTL="$OPENCODE_DIR/bin/flowctl"
 ```
 
 Then run commands with `$FLOWCTL <command>`.

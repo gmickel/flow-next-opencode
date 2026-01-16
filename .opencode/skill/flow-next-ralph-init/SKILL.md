@@ -12,15 +12,15 @@ Scaffold repo-local Ralph harness. Opt-in only.
 - Only create `scripts/ralph/` in the current repo.
 - If `scripts/ralph/` already exists, stop and ask the user to remove it first.
 - Copy templates from `.opencode/skill/flow-next-ralph-init/templates/` into `scripts/ralph/`.
-- Copy `flowctl` and `flowctl.py` from `$PLUGIN_ROOT/scripts/` into `scripts/ralph/`.
+- Copy `flowctl` and `flowctl.py` from `$OPENCODE_DIR/bin/` into `scripts/ralph/`.
 - Set executable bit on `scripts/ralph/ralph.sh`, `scripts/ralph/ralph_once.sh`, and `scripts/ralph/flowctl`.
 
 ## Workflow
 
-1. Resolve repo root and plugin root:
+1. Resolve repo root and OpenCode dir:
    ```bash
    ROOT="$(git rev-parse --show-toplevel)"
-   PLUGIN_ROOT="$ROOT/plugins/flow-next"
+   OPENCODE_DIR="$ROOT/.opencode"
    TEMPLATE_DIR="$ROOT/.opencode/skill/flow-next-ralph-init/templates"
    ```
 2. Check `scripts/ralph/` does not exist.
@@ -53,7 +53,7 @@ fi
    ```bash
    mkdir -p scripts/ralph
    cp -R "$TEMPLATE_DIR/." scripts/ralph/
-   cp "$PLUGIN_ROOT/scripts/flowctl" "$PLUGIN_ROOT/scripts/flowctl.py" scripts/ralph/
+   cp "$OPENCODE_DIR/bin/flowctl" "$OPENCODE_DIR/bin/flowctl.py" scripts/ralph/
    ```
 7. Print next steps (run from terminal, NOT inside OpenCode):
    - Edit `scripts/ralph/config.env` to customize settings

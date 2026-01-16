@@ -15,7 +15,7 @@
 
 > **Experimental.** Active work-in-progress while we chase parity with upstream. **Ralph mode is now available (experimental).**
 
-Ralph docs: `plugins/flow-next/docs/ralph.md`
+Ralph docs: `docs/ralph.md`
 
 ---
 
@@ -93,7 +93,7 @@ From this repo:
 ```
 
 Notes:
-* Installs `.opencode/` + `plugins/flow-next/` into the project
+* Installs `.opencode/` into the project
 * Only writes `.opencode/opencode.json` if the project doesn’t already have one
 
 ### 2) Setup
@@ -408,7 +408,7 @@ Config lives in `.flow/config.json` , separate from Ralph’s `scripts/ralph/con
 
 ## Ralph (Autonomous Mode)
 
-Ralph automation is available ( `/flow-next:ralph-init` ). Docs live at `plugins/flow-next/docs/ralph.md` (setup, `config.env`, `.opencode/opencode.json`, logs).
+Ralph automation is available ( `/flow-next:ralph-init` ). Docs live at `docs/ralph.md` (setup, `config.env`, `.opencode/opencode.json`, logs).
 
 ### Controlling Ralph
 
@@ -522,7 +522,7 @@ flowctl validate --epic fn-1
 flowctl validate --all
 ```
 
-📖 **[Full CLI reference](plugins/flow-next/docs/flowctl.md)**
+📖 **[Full CLI reference](docs/flowctl.md)**
 
 ---
 
