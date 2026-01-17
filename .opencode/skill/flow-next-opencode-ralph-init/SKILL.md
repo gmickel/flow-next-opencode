@@ -1,5 +1,5 @@
 ---
-name: flow-next-ralph-init
+name: flow-next-opencode-ralph-init
 description: Scaffold repo-local Ralph autonomous harness under scripts/ralph/. Use when user runs /flow-next:ralph-init.
 ---
 
@@ -11,7 +11,7 @@ Scaffold repo-local Ralph harness. Opt-in only.
 
 - Only create `scripts/ralph/` in the current repo.
 - If `scripts/ralph/` already exists, stop and ask the user to remove it first.
-- Copy templates from `.opencode/skill/flow-next-ralph-init/templates/` into `scripts/ralph/`.
+- Copy templates from `.opencode/skill/flow-next-opencode-ralph-init/templates/` into `scripts/ralph/`.
 - Copy `flowctl` and `flowctl.py` from `$OPENCODE_DIR/bin/` into `scripts/ralph/`.
 - Set executable bit on `scripts/ralph/ralph.sh`, `scripts/ralph/ralph_once.sh`, and `scripts/ralph/flowctl`.
 
@@ -21,7 +21,7 @@ Scaffold repo-local Ralph harness. Opt-in only.
    ```bash
    ROOT="$(git rev-parse --show-toplevel)"
    OPENCODE_DIR="$ROOT/.opencode"
-   TEMPLATE_DIR="$ROOT/.opencode/skill/flow-next-ralph-init/templates"
+   TEMPLATE_DIR="$ROOT/.opencode/skill/flow-next-opencode-ralph-init/templates"
    ```
 2. Check `scripts/ralph/` does not exist.
 3. Detect available review backends:

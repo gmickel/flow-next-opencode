@@ -1,5 +1,5 @@
 ---
-name: flow-next-worktree-kit
+name: flow-next-opencode-worktree-kit
 description: Manage git worktrees (create/list/switch/cleanup) and copy .env files. Use for parallel feature work, isolated review, clean workspace, or when user mentions worktrees.
 ---
 
@@ -10,7 +10,7 @@ Use the manager script for all worktree actions.
 ```bash
 ROOT="$(git rev-parse --show-toplevel)"
 PLUGIN_ROOT="$ROOT/.opencode/skill"
-bash "$PLUGIN_ROOT/flow-next-worktree-kit/scripts/worktree.sh" <command> [args]
+bash "$PLUGIN_ROOT/flow-next-opencode-worktree-kit/scripts/worktree.sh" <command> [args]
 ```
 
 Commands:

@@ -1,5 +1,5 @@
 ---
-name: flow-next-setup
+name: flow-next-opencode-setup
 description: Local install of flowctl CLI and CLAUDE.md/AGENTS.md instructions. Use when user runs /flow-next:setup.
 ---
 

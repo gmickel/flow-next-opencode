@@ -61,7 +61,7 @@ Detect input type in this order (first match wins):
 
 Based on user's answer from setup questions:
 
-- **Worktree**: use `skill: flow-next-worktree-kit`
+- **Worktree**: use `skill: flow-next-opencode-worktree-kit`
 - **New branch**:
   ```bash
   git checkout main && git pull origin main

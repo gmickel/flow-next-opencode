@@ -5,7 +5,7 @@ Inputs:
 - PLAN_REVIEW={{PLAN_REVIEW}}
 - REQUIRE_PLAN_REVIEW={{REQUIRE_PLAN_REVIEW}}
 
-Treat the following as the user's exact input to flow-next-plan-review:
+Treat the following as the user's exact input to flow-next-opencode-plan-review:
 `{{EPIC_ID}} --review={{PLAN_REVIEW}}`
 
 Steps:
@@ -23,7 +23,7 @@ Ralph mode rules (must follow):
 - If any rule is violated, output `<promise>RETRY</promise>` and stop.
 
 2) Plan review gate:
-   - Call the skill tool: flow-next-plan-review.
+   - Call the skill tool: flow-next-opencode-plan-review.
    - Follow the workflow in the skill using the exact arguments above.
    - Do NOT stop after loading the skill.
    - For opencode: run reviewer via task tool and require `<verdict>` tag.

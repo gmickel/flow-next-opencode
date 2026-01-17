@@ -41,12 +41,12 @@ jobs:
 
       - name: Check ralph.sh syntax (Unix)
         if: runner.os != 'Windows'
-        run: bash -n .opencode/skill/flow-next-ralph-init/templates/ralph.sh
+        run: bash -n .opencode/skill/flow-next-opencode-ralph-init/templates/ralph.sh
 
       - name: Check ralph.sh syntax (Windows Git Bash)
         if: runner.os == 'Windows'
         shell: bash
-        run: bash -n .opencode/skill/flow-next-ralph-init/templates/ralph.sh
+        run: bash -n .opencode/skill/flow-next-opencode-ralph-init/templates/ralph.sh
 
       - name: Smoke check flowctl (Unix)
         if: runner.os != 'Windows'

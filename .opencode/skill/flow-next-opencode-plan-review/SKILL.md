@@ -1,5 +1,5 @@
 ---
-name: flow-next-plan-review
+name: flow-next-opencode-plan-review
 description: Carmack-level plan review via RepoPrompt or OpenCode. Use when reviewing Flow epic specs or design docs. Triggers on /flow-next:plan-review.
 ---
 

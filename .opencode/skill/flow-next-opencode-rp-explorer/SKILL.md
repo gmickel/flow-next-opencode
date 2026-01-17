@@ -1,5 +1,5 @@
 ---
-name: flow-next-rp-explorer
+name: flow-next-opencode-rp-explorer
 description: Token-efficient codebase exploration using RepoPrompt CLI. Use when user says "use rp to..." or "use repoprompt to..." followed by explore, find, understand, search, or similar actions.
 ---
 

@@ -5,13 +5,13 @@ Inputs:
 - BRANCH_MODE={{BRANCH_MODE_EFFECTIVE}}
 - WORK_REVIEW={{WORK_REVIEW}}
 
-Treat the following as the user's exact input to flow-next-work:
+Treat the following as the user's exact input to flow-next-opencode-work:
 `{{TASK_ID}} --branch={{BRANCH_MODE_EFFECTIVE}} --review={{WORK_REVIEW}}`
 
 ## Steps (execute ALL in order)
 
 **Step 1: Execute task**
-- Call the skill tool: flow-next-work.
+- Call the skill tool: flow-next-opencode-work.
 - Follow the workflow in the skill using the exact arguments above.
 - Do NOT run /flow-next:* as shell commands.
 - Do NOT improvise review prompts; use the skill's review flow.

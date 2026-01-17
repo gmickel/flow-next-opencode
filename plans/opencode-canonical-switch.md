@@ -13,7 +13,7 @@
 ## Proposed Canonical Layout
 - `.opencode/` contains **everything runtime** needs:
   - `.opencode/bin/flowctl` + `.opencode/bin/flowctl.py` (new)
-  - `.opencode/skill/flow-next-ralph-init/templates/*` (already present)
+- `.opencode/skill/flow-next-opencode-ralph-init/templates/*` (already present)
   - `.opencode/skill/**` (existing)
   - Docs move to repo-level `docs/` (flowctl + ralph docs)
 - `plugins/flow-next/` will be **removed** from installer output and repo after switch. Upstream porting will be manual (no dev copy).
@@ -49,7 +49,7 @@
 ## Required File Changes (checklist)
 - [ ] `.opencode/bin/flowctl` + `.opencode/bin/flowctl.py` added
 - [ ] `.opencode/skill/*` references updated (flowctl path)
-- [ ] `.opencode/skill/flow-next-ralph-init/templates/*` updated
+- [ ] `.opencode/skill/flow-next-opencode-ralph-init/templates/*` updated
 - [ ] `install.sh` updated (copy `.opencode` only)
 - [ ] `README.md` + `docs/` updated for new pathing
 - [ ] `sync/PORTING.md` updated with new canonical rule

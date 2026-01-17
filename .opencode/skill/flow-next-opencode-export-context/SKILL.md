@@ -1,5 +1,5 @@
 ---
-name: flow-next-export-context
+name: flow-next-opencode-export-context
 description: Export RepoPrompt context for external LLM review (ChatGPT, Claude web, etc.). Use when you want to review code or plans with an external model. Triggers on /flow-next:export-context.
 ---
 
