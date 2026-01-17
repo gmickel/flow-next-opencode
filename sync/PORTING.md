@@ -16,7 +16,7 @@ Goal: keep this OpenCode port aligned with upstream with **manual, minimal edits
    - `.opencode/bin/flowctl`
    - `.opencode/bin/flowctl.py`
 4) If ralph templates change upstream, update:
-   - `.opencode/skill/flow-next-ralph-init/templates/*`
+   - `.opencode/skill/flow-next-opencode-ralph-init/templates/*`
 5) If docs change upstream, update:
    - `docs/*`
 

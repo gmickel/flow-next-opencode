@@ -1,5 +1,5 @@
 ---
-name: flow-next
+name: flow-next-opencode
 description: "Manage .flow/ tasks and epics. Triggers: 'show me my tasks', 'list epics', 'what tasks are there', 'add a task', 'create task', 'what's ready', 'task status', 'show fn-1'. NOT for /flow-next:plan or /flow-next:work."
 ---
 

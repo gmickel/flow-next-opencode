@@ -1,5 +1,5 @@
 ---
-name: flow-next-work
+name: flow-next-opencode-work
 description: Execute a Flow epic or task systematically with git setup, task tracking, quality checks, and commit workflow. Use when implementing a plan or working through a spec. Triggers on /flow-next:work with Flow IDs (fn-1, fn-1.2).
 ---
 
@@ -154,7 +154,7 @@ Wait for response. Parse naturally — user may reply terse or ramble via voice.
 
 ## Workflow
 
-After setup questions answered, read `.opencode/skill/flow-next-work/phases.md` and execute each phase in order.
+After setup questions answered, read `.opencode/skill/flow-next-opencode-work/phases.md` and execute each phase in order.
 If user chose review:
 - Option 2a: run `/flow-next:impl-review` after Phase 6, fix issues until it passes
 - Option 2b: run `/flow-next:impl-review` with export mode after Phase 6

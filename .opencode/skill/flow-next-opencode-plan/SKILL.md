@@ -1,5 +1,5 @@
 ---
-name: flow-next-plan
+name: flow-next-opencode-plan
 description: Create structured build plans from feature requests or Flow IDs. Use when planning features or designing implementation. Triggers on /flow-next:plan with text descriptions or Flow IDs (fn-1, fn-1.2).
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: flow-next-impl-review
+name: flow-next-opencode-impl-review
 description: John Carmack-level implementation review via RepoPrompt or OpenCode. Use when reviewing code changes, PRs, or implementations. Triggers on /flow-next:impl-review.
 ---
 

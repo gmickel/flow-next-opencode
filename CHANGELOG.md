@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Rename OpenCode skills to `flow-next-opencode-*` to avoid Claude skill collisions
+
 ## 0.2.3
 
 - Canonicalize `.opencode/` (remove legacy plugin/sync paths)

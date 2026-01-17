@@ -187,7 +187,7 @@ export default async function (_input: PluginInput): Promise<Hooks> {
         if (subagent !== allowedReviewer) {
           block(
             `BLOCKED: Ralph mode only allows task tool for reviewer '${allowedReviewer}'. ` +
-              "Use the skill tool (flow-next-plan-review / flow-next-work) and do NOT spawn generic tasks.",
+              "Use the skill tool (flow-next-opencode-plan-review / flow-next-opencode-work) and do NOT spawn generic tasks.",
           )
         }
       }

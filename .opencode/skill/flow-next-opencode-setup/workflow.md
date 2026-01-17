@@ -147,7 +147,7 @@ Notes:
 ## Step 8: Ask about starring
 
 Ask with the **question** tool:
-- **Header**: `Support Flow-Next`
+- **Header**: `Support`
 - **Question**: `Flow-Next is free and open source. Would you like to ⭐ star the repo on GitHub to support the project?`
 - **Options**:
   1. `Yes, star the repo`
