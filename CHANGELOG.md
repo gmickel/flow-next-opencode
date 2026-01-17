@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Rename OpenCode skills to `flow-next-opencode-*` to avoid Claude skill collisions
+- Thanks @gmickel for the contribution
 
 ## 0.2.3
 
