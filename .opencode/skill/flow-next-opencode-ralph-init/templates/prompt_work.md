@@ -27,7 +27,7 @@ If status != `done`, output `<promise>RETRY</promise>` and stop.
 mkdir -p "$(dirname '{{REVIEW_RECEIPT_PATH}}')"
 ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 cat > '{{REVIEW_RECEIPT_PATH}}' <<EOF
-{"type":"impl_review","id":"{{TASK_ID}}","mode":"{{WORK_REVIEW}}","timestamp":"$ts"}
+{"type":"impl_review","id":"{{TASK_ID}}","mode":"{{WORK_REVIEW}}","verdict":"SHIP","timestamp":"$ts","iteration":{{RALPH_ITERATION}}}
 EOF
 echo "Receipt written: {{REVIEW_RECEIPT_PATH}}"
 ```

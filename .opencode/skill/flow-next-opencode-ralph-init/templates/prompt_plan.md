@@ -45,7 +45,7 @@ Ralph mode rules (must follow):
    mkdir -p "$(dirname '{{REVIEW_RECEIPT_PATH}}')"
    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
    cat > '{{REVIEW_RECEIPT_PATH}}' <<EOF
-   {"type":"plan_review","id":"{{EPIC_ID}}","mode":"{{PLAN_REVIEW}}","timestamp":"$ts"}
+   {"type":"plan_review","id":"{{EPIC_ID}}","mode":"{{PLAN_REVIEW}}","verdict":"SHIP","timestamp":"$ts","iteration":{{RALPH_ITERATION}}}
    EOF
    ```
    **CRITICAL: Copy EXACTLY. The "id":"{{EPIC_ID}}" field is REQUIRED.**

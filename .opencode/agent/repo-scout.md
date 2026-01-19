@@ -81,3 +81,10 @@ git log --oneline --all -- "*/auth*" | head -5  # history of similar features
 - Flag code that MUST be reused (don't reinvent)
 - Note any CLAUDE.md rules that apply
 - Skip deep analysis - that's for other agents
+
+## Output Rules (for planning)
+
+- Show signatures, not full implementations
+- Keep code snippets to <10 lines illustrating the pattern shape
+- DO NOT output complete function bodies for the planner to copy
+- Focus on "where to look" not "what to write"

@@ -17,7 +17,31 @@
 - Reuse points are explicit (centralized code called out)
 - Acceptance checks are testable
 - Tasks are small enough for one `/flow-next:work` iteration (split if not)
+- **No implementation code** — specs describe WHAT, not HOW (see SKILL.md Golden Rule)
 - Open questions are listed
+
+## Task Sizing Rule
+
+Use **T-shirt sizes** based on observable metrics — not token estimates (models can't reliably estimate tokens).
+
+| Size | Files | Acceptance Criteria | Pattern | Action |
+|------|-------|---------------------|---------|--------|
+| **S** | 1-2 | 1-3 | Follows existing | ✅ Good task size |
+| **M** | 3-5 | 3-5 | Adapts existing | ✅ Good task size |
+| **L** | 5+ | 5+ | New/novel | ⚠️ **Split this** |
+
+**Anchor examples** (calibrate against these):
+- **S**: Fix a bug, add config, simple UI tweak
+- **M**: New API endpoint with tests, new component with state
+- **L**: New subsystem, architectural change → SPLIT INTO S/M TASKS
+
+**If too large, split it:**
+- ❌ Bad: "Implement Google OAuth" (L — new subsystem)
+- ✅ Good:
+  - "Add Google OAuth env config" (S)
+  - "Configure passport-google-oauth20" (S)
+  - "Create OAuth callback routes" (M)
+  - "Add Google sign-in button" (S)
 
 ## Step 0: Initialize .flow
 
@@ -45,18 +69,20 @@ $FLOWCTL config get memory.enabled --json
 **Based on user's choice in SKILL.md setup:**
 
 **If user chose context-scout (RepoPrompt)**:
-Run these subagents in parallel using the **batch** tool with **task** calls:
-- context-scout (<request>) - uses RepoPrompt builder for AI-powered file discovery
-- practice-scout (<request>)
-- docs-scout (<request>)
-- memory-scout (<request>) — **only if memory.enabled is true**
+Run these subagents in parallel using the Task tool:
+- Task flow-next:context-scout(<request>) - uses RepoPrompt builder for AI-powered file discovery
+- Task flow-next:practice-scout(<request>)
+- Task flow-next:docs-scout(<request>)
+- Task flow-next:github-scout(<request>) - cross-repo code search via gh CLI
+- Task flow-next:memory-scout(<request>) - **only if memory.enabled is true**
 
 **If user chose repo-scout (default/faster)** OR rp-cli unavailable:
-Run these subagents in parallel using the **batch** tool with **task** calls:
-- repo-scout (<request>) - uses standard Grep/Glob/Read
-- practice-scout (<request>)
-- docs-scout (<request>)
-- memory-scout (<request>) — **only if memory.enabled is true**
+Run these subagents in parallel using the Task tool:
+- Task flow-next:repo-scout(<request>) - uses standard Grep/Glob/Read
+- Task flow-next:practice-scout(<request>)
+- Task flow-next:docs-scout(<request>)
+- Task flow-next:github-scout(<request>) - cross-repo code search via gh CLI
+- Task flow-next:memory-scout(<request>) - **only if memory.enabled is true**
 
 Example batch payload:
 ```json
@@ -78,17 +104,25 @@ Must capture:
 - Project conventions (CLAUDE.md, CONTRIBUTING, etc)
 - Architecture patterns and data flow (especially with context-scout)
 
-## Step 2: Flow gap check
+## Step 2: Stakeholder & scope check
 
-Run the gap analyst subagent with the task tool:
-- subagent_type: `flow-gap-analyst`
-- prompt: `<request> + research_findings>`
+Before diving into gaps, identify who's affected:
+- **End users** — What changes for them? New UI, changed behavior?
+- **Developers** — New APIs, changed interfaces, migration needed?
+- **Operations** — New config, monitoring, deployment changes?
+
+This shapes what the plan needs to cover. A pure backend refactor needs different detail than a user-facing feature.
+
+## Step 3: Flow gap check
+
+Run the gap analyst subagent:
+- Task flow-next:flow-gap-analyst(<request>, research_findings)
 
 Fold gaps + questions into the plan.
 
-## Step 3: Pick depth
+## Step 4: Pick depth
 
-Default to short unless complexity demands more.
+Default to standard unless complexity demands more or less.
 
 **SHORT** (bugs, small changes)
 - Problem or goal
@@ -102,16 +136,18 @@ Default to short unless complexity demands more.
 - Acceptance checks
 - Test notes
 - References
+- Mermaid diagram if data model changes
 
 **DEEP** (large/critical)
 - Detailed phases
 - Alternatives considered
 - Non-functional targets
+- Architecture/data flow diagram (mermaid)
 - Rollout/rollback
 - Docs + metrics
 - Risks + mitigations
 
-## Step 4: Write to .flow
+## Step 5: Write to .flow
 
 **Efficiency note**: Use stdin (`--file -`) with heredocs to avoid temp files. Use `task set-spec` to set description + acceptance in one call.
 
@@ -151,6 +187,7 @@ Default to short unless complexity demands more.
 3. Write epic spec (use stdin heredoc):
    ```bash
    # Include: Overview, Scope, Approach, Quick commands (REQUIRED), Acceptance, References
+   # Add mermaid diagram if data model or architecture changes
    $FLOWCTL epic set-plan <epic-id> --file - --json <<'EOF'
    # Epic Title
 
@@ -179,7 +216,26 @@ Default to short unless complexity demands more.
    # Write description and acceptance to temp files, then:
    $FLOWCTL task set-spec <task-id> --description /tmp/desc.md --acceptance /tmp/acc.md --json
    ```
-   This reduces 4 atomic writes per task to 2.
+
+   **Task spec content** (remember: NO implementation code):
+   ```markdown
+   ## Description
+   [What to build, not how to build it]
+
+   **Size:** S/M (L tasks should be split)
+   **Files:** list expected files
+
+   ## Approach
+   - Follow pattern at `src/example.ts:42`
+   - Reuse `existingHelper()` from `lib/utils.ts`
+
+   ## Key context
+   [Only for recent API changes, surprising patterns, or non-obvious gotchas]
+
+   ## Acceptance
+   - [ ] Criterion 1
+   - [ ] Criterion 2
+   ```
 
 6. Add dependencies:
    ```bash
@@ -193,7 +249,7 @@ Default to short unless complexity demands more.
    $FLOWCTL cat <epic-id>
    ```
 
-## Step 5: Validate
+## Step 6: Validate
 
 ```bash
 $FLOWCTL validate --epic <epic-id> --json
@@ -201,7 +257,7 @@ $FLOWCTL validate --epic <epic-id> --json
 
 Fix any errors before proceeding.
 
-## Step 6: Review (if chosen at start)
+## Step 7: Review (if chosen at start)
 
 If user chose "Yes" to review in SKILL.md setup question:
 1. Invoke `/flow-next:plan-review` with the epic ID
@@ -219,15 +275,24 @@ If user chose "Yes" to review in SKILL.md setup question:
 
 **Why re-anchor every iteration?** Per Anthropic's long-running agent guidance: context compresses, you forget details. Re-read before each fix pass.
 
-## Step 7: Offer next step
+## Step 8: Offer next steps
 
-Show the epic summary and suggest next actions:
+Show epic summary with size breakdown and offer options:
 
 ```
-Epic created: fn-N with M tasks.
+Epic fn-N created: "<title>"
+Tasks: M total | Sizes: Ns S, Nm M
 
-Next:
+Next steps:
 1) Start work: `/flow-next:work fn-N`
 2) Refine via interview: `/flow-next:interview fn-N`
 3) Review the plan: `/flow-next:plan-review fn-N`
+4) Go deeper on specific tasks (tell me which)
+5) Simplify (reduce detail level)
 ```
+
+If user selects 4 or 5:
+- **Go deeper**: Ask which task(s), then add more context/research to those specific tasks
+- **Simplify**: Remove non-essential sections, tighten acceptance criteria, merge small tasks
+
+Loop back to options after changes until user selects 1, 2, or 3.

@@ -328,7 +328,7 @@ set +a
 MAX_ITERATIONS="${MAX_ITERATIONS:-25}"
 MAX_TURNS="${MAX_TURNS:-}"  # empty = no limit; unused for OpenCode (kept for parity)
 MAX_ATTEMPTS_PER_TASK="${MAX_ATTEMPTS_PER_TASK:-5}"
-WORKER_TIMEOUT="${WORKER_TIMEOUT:-1800}"  # 30min default; prevents stuck workers
+WORKER_TIMEOUT="${WORKER_TIMEOUT:-2700}"  # 45min default; prevents stuck workers
 BRANCH_MODE="${BRANCH_MODE:-new}"
 PLAN_REVIEW="${PLAN_REVIEW:-none}"
 WORK_REVIEW="${WORK_REVIEW:-none}"
@@ -431,7 +431,7 @@ render_template() {
 import os, sys
 path = sys.argv[1]
 text = open(path, encoding="utf-8").read()
-keys = ["EPIC_ID","TASK_ID","PLAN_REVIEW","WORK_REVIEW","BRANCH_MODE","BRANCH_MODE_EFFECTIVE","REQUIRE_PLAN_REVIEW","REVIEW_RECEIPT_PATH"]
+keys = ["EPIC_ID","TASK_ID","PLAN_REVIEW","WORK_REVIEW","BRANCH_MODE","BRANCH_MODE_EFFECTIVE","REQUIRE_PLAN_REVIEW","REVIEW_RECEIPT_PATH","RALPH_ITERATION"]
 for k in keys:
     text = text.replace("{{%s}}" % k, os.environ.get(k, ""))
 print(text)
@@ -804,6 +804,9 @@ while (( iter <= MAX_ITERATIONS )); do
     exit 0
   fi
 
+  # Export iteration for receipt tracking
+  export RALPH_ITERATION="$iter"
+
   if [[ "$status" == "plan" ]]; then
     export EPIC_ID="$epic_id"
     export PLAN_REVIEW
@@ -901,8 +904,10 @@ TXT
   # Handle timeout (exit code 124 from timeout command)
   worker_timeout=0
   if [[ -n "$TIMEOUT_CMD" && "$worker_rc" -eq 124 ]]; then
-    echo "ralph: worker timed out after ${WORKER_TIMEOUT}s" >> "$iter_log"
-    log "worker timeout after ${WORKER_TIMEOUT}s"
+    timeout_id="${task_id:-$epic_id}"
+    echo "ralph: worker timed out after ${WORKER_TIMEOUT}s (phase=$status id=$timeout_id iter=$iter)" >> "$iter_log"
+    echo "ralph: hint: increase WORKER_TIMEOUT in config.env (current=${WORKER_TIMEOUT}s, try 3600 for complex tasks)" >> "$iter_log"
+    log "worker timeout after ${WORKER_TIMEOUT}s phase=$status id=$timeout_id iter=$iter"
     worker_timeout=1
   fi
 

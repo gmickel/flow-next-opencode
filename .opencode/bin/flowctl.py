@@ -959,6 +959,35 @@ a thorough review requires understanding the system, not just the diff.
 6. **Tests** - Adequate coverage? Testing behavior?
 7. **Security** - Injection? Auth gaps?
 
+## Scenario Exploration (for changed code only)
+
+Walk through these scenarios for new/modified code paths:
+- Happy path: Normal operation with valid inputs
+- Invalid inputs: Null, empty, malformed data
+- Boundary conditions: Min/max values, empty collections
+- Concurrent access: Race conditions, deadlocks
+- Network issues: Timeouts, partial failures
+- Resource exhaustion: Memory, disk, connections
+- Security attacks: Injection, overflow, DoS vectors
+- Data corruption: Partial writes, inconsistency
+- Cascading failures: Downstream service issues
+
+Only flag issues in the **changed code** - not pre-existing patterns.
+
+## Verdict Scope
+
+Explore broadly to understand impact, but your VERDICT must only consider:
+- Issues **introduced** by this changeset
+- Issues **directly affected** by this changeset (e.g., broken by the change)
+- Pre-existing issues that would **block shipping** this specific change
+
+Do NOT mark NEEDS_WORK for:
+- Pre-existing issues unrelated to the change
+- "Nice to have" improvements outside the change scope
+- Style nitpicks in untouched code
+
+You MAY mention these as "FYI" observations without affecting the verdict.
+
 ## Output Format
 
 For each issue found:
@@ -990,6 +1019,20 @@ Do NOT skip this tag. The automation depends on it."""
 5. **Risks** - Blockers identified? Security gaps? Mitigation?
 6. **Scope** - Right-sized? Over/under-engineering?
 7. **Testability** - How will we verify this works?
+
+## Verdict Scope
+
+Explore the codebase to understand context, but your VERDICT must only consider:
+- Issues **within this plan** that block implementation
+- Feasibility problems given the **current codebase state**
+- Missing requirements that are **part of the stated goal**
+
+Do NOT mark NEEDS_WORK for:
+- Pre-existing codebase issues unrelated to this plan
+- Suggestions for features outside the plan scope
+- "While we're at it" improvements
+
+You MAY mention these as "FYI" observations without affecting the verdict.
 
 ## Output Format
 
@@ -4117,6 +4160,35 @@ Review all changes on the current branch compared to {base_branch}.
 3. **Simplicity** - Is this the simplest solution?
 4. **Security** - Injection, auth gaps, resource exhaustion?
 5. **Edge Cases** - Failure modes, race conditions, malformed input?
+
+## Scenario Exploration (for changed code only)
+
+Walk through these scenarios for new/modified code paths:
+- Happy path: Normal operation with valid inputs
+- Invalid inputs: Null, empty, malformed data
+- Boundary conditions: Min/max values, empty collections
+- Concurrent access: Race conditions, deadlocks
+- Network issues: Timeouts, partial failures
+- Resource exhaustion: Memory, disk, connections
+- Security attacks: Injection, overflow, DoS vectors
+- Data corruption: Partial writes, inconsistency
+- Cascading failures: Downstream service issues
+
+Only flag issues in the **changed code** - not pre-existing patterns.
+
+## Verdict Scope
+
+Your VERDICT must only consider issues in the **changed code**:
+- Issues **introduced** by this changeset
+- Issues **directly affected** by this changeset
+- Pre-existing issues that would **block shipping** this specific change
+
+Do NOT mark NEEDS_WORK for:
+- Pre-existing issues in untouched code
+- "Nice to have" improvements outside the diff
+- Style nitpicks in files you didn't change
+
+You MAY mention these as "FYI" observations without affecting the verdict.
 
 ## Output Format
 

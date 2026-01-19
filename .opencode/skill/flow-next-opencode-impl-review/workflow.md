@@ -188,12 +188,29 @@ If you cannot find `<file_contents>`, ask for the files to be re-attached before
 
 Conduct a John Carmack-level review:
 
-1. **Correctness** - Logic bugs? Edge cases? Race conditions?
-2. **Safety** - Security risks? Data leaks? Injection paths?
-3. **Performance** - Hot paths? N+1s? Unnecessary work?
-4. **Maintainability** - Readability? Complexity? Abstractions?
-5. **Tests** - Coverage gaps? Missing failure cases?
-6. **Observability** - Logging/metrics? Debuggability?
+1. **Correctness** - Matches spec? Logic errors?
+2. **Simplicity** - Simplest solution? Over-engineering?
+3. **DRY** - Duplicated logic? Existing patterns?
+4. **Architecture** - Data flow? Clear boundaries?
+5. **Edge Cases** - Failure modes? Race conditions?
+6. **Tests** - Adequate coverage? Testing behavior?
+7. **Security** - Injection? Auth gaps?
+
+## Scenario Exploration (for changed code only)
+
+Walk through these scenarios mentally for any new/modified code paths:
+
+- [ ] Happy path - Normal operation with valid inputs
+- [ ] Invalid inputs - Null, empty, malformed data
+- [ ] Boundary conditions - Min/max values, empty collections
+- [ ] Concurrent access - Race conditions, deadlocks
+- [ ] Network issues - Timeouts, partial failures
+- [ ] Resource exhaustion - Memory, disk, connections
+- [ ] Security attacks - Injection, overflow, DoS vectors
+- [ ] Data corruption - Partial writes, inconsistency
+- [ ] Cascading failures - Downstream service issues
+
+Only flag issues that apply to the **changed code** - not pre-existing patterns.
 
 ## Output Format
 

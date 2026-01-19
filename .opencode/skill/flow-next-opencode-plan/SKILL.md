@@ -21,7 +21,25 @@ $FLOWCTL <command>
 
 **Role**: product-minded planner with strong repo awareness.
 **Goal**: produce an epic with tasks that match existing conventions and reuse points.
-**Task size**: every task must fit one `/flow-next:work` iteration. If it won't, split it.
+**Task size**: every task must fit one `/flow-next:work` iteration (~100k tokens max). If it won't, split it.
+
+## The Golden Rule: No Implementation Code
+
+**Plans are specs, not implementations.** Do NOT write the code that will be implemented.
+
+### Code IS allowed:
+- **Signatures/interfaces** (what, not how): `function validate(input: string): Result`
+- **Patterns from this repo** (with file:line ref): "Follow pattern at `src/auth.ts:42`"
+- **Recent/surprising APIs** (from docs-scout): "React 19 changed X — use `useOptimistic` instead"
+- **Non-obvious gotchas** (from practice-scout): "Must call `cleanup()` or memory leaks"
+
+### Code is FORBIDDEN:
+- Complete function implementations
+- Full class/module bodies
+- "Here's what you'll write" blocks
+- Copy-paste ready snippets (>10 lines)
+
+**Why:** Implementation happens in `/flow-next:work` with fresh context. Writing it here wastes tokens in planning, review, AND implementation — then causes drift when the implementer does it differently anyway.
 
 ## Input
 
@@ -78,6 +96,12 @@ Parse the arguments for these patterns. If found, use them and skip questions:
 
 **IMPORTANT**: Ask setup questions in **plain text only**. **Do NOT use the question tool.** This is required for voice dictation (e.g., "1a 2b").
 
+**Plan depth** (parse from args or ask):
+- `--depth=short` or "quick" or "minimal" → SHORT
+- `--depth=standard` or "normal" → STANDARD
+- `--depth=deep` or "comprehensive" or "detailed" → DEEP
+- Default: SHORT (simpler is better)
+
 **Skip review question if**: Ralph mode (`FLOW_RALPH=1`) OR backend already configured (`CONFIGURED_BACKEND` not empty). In these cases, only ask research question (if rp-cli available):
 
 ```
@@ -86,6 +110,7 @@ a) Yes, context-scout (slower, thorough)
 b) No, repo-scout (faster)
 
 (Reply: "a", "b", or just tell me)
+(Tip: --depth=short|standard|deep, --review=rp|opencode|none)
 ```
 
 If rp-cli not available, skip questions entirely and use defaults.
@@ -96,40 +121,52 @@ If rp-cli not available, skip questions entirely and use defaults.
 ```
 Quick setup before planning:
 
-1. **Research approach** — Use RepoPrompt for deeper context?
+1. **Plan depth** — How detailed?
+   a) Short — problem, acceptance, key context only
+   b) Standard (default) — + approach, risks, test notes
+   c) Deep — + phases, alternatives, rollout plan
+
+2. **Research** — Use RepoPrompt for deeper context?
    a) Yes, context-scout (slower, thorough)
    b) No, repo-scout (faster)
 
-2. **Review** — Run Carmack-level review after?
-   a) Yes, OpenCode review (GPT-5.2, reasoning high)
-   b) Yes, RepoPrompt chat (macOS, visual builder)
-   c) Yes, export for external LLM (ChatGPT, Claude web)
-   d) No
+3. **Review** — Run Carmack-level review after?
+   a) OpenCode review (GPT-5.2, reasoning high)
+   b) RepoPrompt chat (macOS, visual builder)
+   c) Export for external LLM (ChatGPT, Claude web)
+   d) None (configure later)
 
-(Reply: "1a 2a", "1b 2d", or just tell me naturally)
+(Reply: "1a 2b 3d", or just tell me naturally)
 ```
 
 **If rp-cli not available:**
 ```
 Quick setup before planning:
 
-**Review** — Run Carmack-level review after?
-a) Yes, OpenCode review (GPT-5.2, reasoning high)
-b) Yes, export for external LLM
-c) No
+1. **Plan depth** — How detailed?
+   a) Short — problem, acceptance, key context only
+   b) Standard (default) — + approach, risks, test notes
+   c) Deep — + phases, alternatives, rollout plan
 
-(Reply: "a", "b", or just tell me naturally)
+2. **Review** — Run Carmack-level review after?
+   a) Yes, OpenCode review (GPT-5.2, reasoning high)
+   b) Yes, export for external LLM
+   c) No
+
+(Reply: "1a 2a", "1b 2c", or just tell me naturally)
 ```
 
 Wait for response. Parse naturally — user may reply terse ("1a 2b") or ramble via voice.
 
 **Defaults when empty/ambiguous:**
+- Depth = `standard` (balanced detail)
 - Research = `grep` (repo-scout)
 - Review = configured backend if set, else `opencode`, else `rp` if available, else `none`
 
 If rp-cli not available: skip research questions, use repo-scout, review defaults to `opencode` or `none` if disabled.
 
 **Defaults when no review backend available:**
+- Depth = `standard`
 - Research = `grep`
 - Review = `none`
 
