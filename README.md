@@ -233,6 +233,7 @@ flowchart TD
 | `/flow-next:interview <id>` | Deep interview to flesh out a spec before planning |
 | `/flow-next:plan-review <id>` | Carmack-level plan review via OpenCode or RepoPrompt |
 | `/flow-next:impl-review` | Carmack-level impl review of current branch |
+| `/flow-next:sync <id>` | Manually sync downstream specs after implementation drift |
 | `/flow-next:ralph-init` | Scaffold repo-local Ralph harness ( `scripts/ralph/` ) |
 | `/flow-next:setup` | Install flowctl locally + add docs |
 | `/flow-next:uninstall` | Remove flow-next from project (keeps tasks if desired) |
@@ -305,6 +306,32 @@ Everything is bundled:
 
 ```bash
 flowctl validate --all
+```
+
+### Fresh Context Per Task (Worker Agent)
+
+When running `/flow-next:work` on an epic, each task spawns a dedicated worker subagent with fresh context. This prevents context bloat across large epics and ensures clean re-anchoring.
+
+### Plan-Sync (Spec Drift Detection)
+
+When implementation differs from spec (e.g., you planned `UserAuth.login()` but built `authService.authenticate()`), downstream tasks may reference stale APIs.
+
+Plan-sync detects this drift and updates downstream specs:
+
+```bash
+# After completing a task, sync downstream specs
+/flow-next:sync fn-1.1
+
+# Or sync entire epic from most recent done task
+/flow-next:sync fn-1
+
+# Dry-run to see what would change
+/flow-next:sync fn-1 --dry-run
+```
+
+Enable auto-sync after each task (optional):
+```bash
+flowctl config set planSync.enabled true
 ```
 
 ### Dependency Graphs
@@ -520,6 +547,9 @@ flowctl cat fn-1
 
 flowctl validate --epic fn-1
 flowctl validate --all
+
+flowctl review-backend            # Get configured review backend (ASK if not set)
+flowctl config set review.backend opencode  # Set default backend
 ```
 
 📖 **[Full CLI reference](docs/flowctl.md)**

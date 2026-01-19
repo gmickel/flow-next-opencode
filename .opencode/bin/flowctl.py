@@ -75,18 +75,35 @@ def ensure_flow_exists() -> bool:
 
 def get_default_config() -> dict:
     """Return default config structure."""
-    return {"memory": {"enabled": False}}
+    return {
+        "memory": {"enabled": False},
+        "planSync": {"enabled": False},
+        "review": {"backend": None},
+    }
+
+
+def deep_merge(base: dict, override: dict) -> dict:
+    """Deep merge override into base. Override values win for conflicts."""
+    result = base.copy()
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
 
 
 def load_flow_config() -> dict:
-    """Load .flow/config.json, returning defaults if missing."""
+    """Load .flow/config.json, merging with defaults for missing keys."""
     config_path = get_flow_dir() / CONFIG_FILE
     defaults = get_default_config()
     if not config_path.exists():
         return defaults
     try:
         data = json.loads(config_path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else defaults
+        if isinstance(data, dict):
+            return deep_merge(defaults, data)
+        return defaults
     except (json.JSONDecodeError, Exception):
         return defaults
 
@@ -1733,6 +1750,31 @@ def cmd_config_set(args: argparse.Namespace) -> None:
         json_output({"key": args.key, "value": new_value, "message": f"{args.key} set"})
     else:
         print(f"{args.key} set to {new_value}")
+
+
+def cmd_review_backend(args: argparse.Namespace) -> None:
+    """Get review backend for skill conditionals. Returns ASK if not configured."""
+    # Priority: FLOW_REVIEW_BACKEND env > config > ASK
+    env_val = os.environ.get("FLOW_REVIEW_BACKEND", "").strip()
+    if env_val and env_val in ("rp", "opencode", "none"):
+        backend = env_val
+        source = "env"
+    elif ensure_flow_exists():
+        cfg_val = get_config("review.backend")
+        if cfg_val and cfg_val in ("rp", "opencode", "none"):
+            backend = cfg_val
+            source = "config"
+        else:
+            backend = "ASK"
+            source = "none"
+    else:
+        backend = "ASK"
+        source = "none"
+
+    if args.json:
+        json_output({"backend": backend, "source": source})
+    else:
+        print(backend)
 
 
 MEMORY_TEMPLATES = {
@@ -4941,6 +4983,13 @@ def main() -> None:
     p_config_set.add_argument("value", help="Config value")
     p_config_set.add_argument("--json", action="store_true", help="JSON output")
     p_config_set.set_defaults(func=cmd_config_set)
+
+    # review-backend (helper for skills)
+    p_review_backend = subparsers.add_parser(
+        "review-backend", help="Get review backend (ASK if not configured)"
+    )
+    p_review_backend.add_argument("--json", action="store_true", help="JSON output")
+    p_review_backend.set_defaults(func=cmd_review_backend)
 
     # memory
     p_memory = subparsers.add_parser("memory", help="Memory commands")

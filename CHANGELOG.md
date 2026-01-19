@@ -58,6 +58,15 @@
 
 - **Fixed missing verdict in receipts** — Receipt JSON now includes `"verdict":"SHIP"` as required by `verify_receipt`
 
+### Plan-Sync System (NEW)
+
+- **plan-sync agent** — Detects implementation drift and updates downstream task specs
+- **worker agent** — Fresh context per task when running epics
+- **`/flow-next:sync` command** — Manual trigger for spec synchronization
+- **`flowctl review-backend`** — Helper command returns `ASK`/`rp`/`opencode`/`none`
+- **Config defaults expanded** — Added `planSync.enabled` and `review.backend` to config schema
+- **`deep_merge()` for config** — Properly merges user config with defaults
+
 ### Other
 
 - Rename OpenCode skills to `flow-next-opencode-*` to avoid Claude skill collisions
