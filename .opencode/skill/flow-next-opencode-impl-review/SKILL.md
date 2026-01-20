@@ -97,10 +97,9 @@ fi
 5. **Re-reviews MUST stay in SAME chat** - omit `--new-chat` after first review
 
 **For opencode backend:**
-1. Use the **task tool** with subagent_type `opencode-reviewer`
-2. Reviewer gathers context via tools (git diff/log, read files)
-3. Parse verdict from reviewer output
-4. Extract `session_id` from `<task_metadata>` and reuse it for re-reviews
+1. Use `$FLOWCTL opencode impl-review` command
+2. Pass `--base` for diff scope and `--receipt` for session continuity
+3. Parse verdict from command output
 
 **For all backends:**
 - If `REVIEW_RECEIPT_PATH` set: write receipt after review (any verdict)
@@ -135,29 +134,16 @@ Run backend detection from SKILL.md above. Then branch:
 
 ### OpenCode Backend
 
-Use the task tool with subagent_type `opencode-reviewer`.
-
-Prompt must require:
-- `git log main..HEAD --oneline`
-- `git diff main..HEAD --stat`
-- `git diff main..HEAD`
-- Read any changed files needed for correctness
-- No questions, no code changes, no TodoWrite
-- End with `<verdict>SHIP</verdict>` or `<verdict>NEEDS_WORK</verdict>` or `<verdict>MAJOR_RETHINK</verdict>`
-
-Parse verdict from the subagent response.
-Extract `session_id` from `<task_metadata>` and reuse for re-review.
-
-On NEEDS_WORK: fix code, commit, re-run review (same backend).
-
-Write receipt if `REVIEW_RECEIPT_PATH` set:
 ```bash
-mkdir -p "$(dirname "$RECEIPT_PATH")"
-ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-cat > "$RECEIPT_PATH" <<EOF
-{"type":"impl_review","id":"$TASK_ID","mode":"opencode","verdict":"<VERDICT>","timestamp":"$ts"}
-EOF
+TASK_ID="${1:-}"
+BASE_COMMIT="${BASE_COMMIT:-main}"
+RECEIPT_PATH="${REVIEW_RECEIPT_PATH:-/tmp/impl-review-receipt.json}"
+
+$FLOWCTL opencode impl-review "$TASK_ID" --base "$BASE_COMMIT" --receipt "$RECEIPT_PATH"
+# Output includes VERDICT=SHIP|NEEDS_WORK|MAJOR_RETHINK
 ```
+
+On NEEDS_WORK: fix code, commit, re-run (receipt enables session continuity).
 
 ### RepoPrompt Backend
 
@@ -188,7 +174,7 @@ If verdict is NEEDS_WORK, loop internally until SHIP:
 2. **Fix code** and run tests/lints
 3. **Commit fixes** (mandatory before re-review)
 4. **Re-review**:
-   - **OpenCode**: re-run reviewer subagent with updated diff
+   - **OpenCode**: `$FLOWCTL opencode impl-review "$TASK_ID" --base "$BASE_COMMIT" --receipt "$RECEIPT_PATH"`
    - **RP**: `$FLOWCTL rp chat-send --window "$W" --tab "$T" --message-file /tmp/re-review.md` (NO `--new-chat`)
 5. **Repeat** until `<verdict>SHIP</verdict>`
 

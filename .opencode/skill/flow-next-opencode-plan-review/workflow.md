@@ -65,22 +65,16 @@ Include:
 - Review criteria (completeness, feasibility, clarity, architecture, risks, scope, testability)
 - Required verdict tag
 
-### Step 3: Execute review (subagent)
+### Step 3: Execute review via flowctl
 
-Use the **task** tool with subagent_type `opencode-reviewer`. The reviewer must gather context itself via tools, including Flow plan/spec.
+Use the `flowctl opencode plan-review` command:
 
-**Task tool call** (example):
-```json
-{
-  "description": "Plan review",
-  "prompt": "You are the OpenCode reviewer. Review the plan for EPIC_ID. Rules: no questions, no code changes, no TodoWrite. REQUIRED: set FLOWCTL to `.opencode/bin/flowctl`, then run `$FLOWCTL show <EPIC_ID> --json` and `$FLOWCTL cat <EPIC_ID>`. Review for completeness, feasibility, clarity, architecture, risks (incl security), scope, and testability. End with exactly one verdict tag: <verdict>SHIP</verdict> or <verdict>NEEDS_WORK</verdict> or <verdict>MAJOR_RETHINK</verdict>.",
-  "subagent_type": "opencode-reviewer"
-}
+```bash
+$FLOWCTL opencode plan-review "$EPIC_ID" --receipt "$RECEIPT_PATH"
+# Output includes VERDICT=SHIP|NEEDS_WORK|MAJOR_RETHINK
 ```
 
-**After the task completes**:
-- Parse `VERDICT` from the subagent output.
-- Extract `session_id` from the `<task_metadata>` block (used for re-reviews).
+Parse `VERDICT` from the command output.
 
 If `VERDICT` is empty, output `<promise>RETRY</promise>` and stop.
 
@@ -110,7 +104,7 @@ EOF
 If `VERDICT=NEEDS_WORK`:
 1. Parse issues from output
 2. Fix plan via `$FLOWCTL epic set-plan`
-3. Re-run Step 3 **with the same task session_id** (pass `session_id` to the task tool)
+3. Re-run: `$FLOWCTL opencode plan-review "$EPIC_ID" --receipt "$RECEIPT_PATH"`
 4. Repeat until SHIP
 
 ---

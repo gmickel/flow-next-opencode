@@ -17,7 +17,7 @@ Steps:
 
 Ralph mode rules (must follow):
 - If PLAN_REVIEW=rp: use `flowctl rp` wrappers (setup-review, select-add, prompt-get, chat-send).
-- If PLAN_REVIEW=opencode: use the task tool with subagent_type `opencode-reviewer`.
+- If PLAN_REVIEW=opencode: use `scripts/ralph/flowctl opencode plan-review` command.
 - Write receipt via bash heredoc (no Write tool) if REVIEW_RECEIPT_PATH is set.
 - Do NOT run /flow-next:* as shell commands.
 - If any rule is violated, output `<promise>RETRY</promise>` and stop.
@@ -26,7 +26,7 @@ Ralph mode rules (must follow):
    - Call the skill tool: flow-next-opencode-plan-review.
    - Follow the workflow in the skill using the exact arguments above.
    - Do NOT stop after loading the skill.
-   - For opencode: run reviewer via task tool and require `<verdict>` tag.
+   - For opencode: run `flowctl opencode plan-review` and require `<verdict>` tag.
    - For rp: use flowctl rp wrappers (no --json, no --new-chat on re-review).
    - For export: follow export flow in skill.
    - If PLAN_REVIEW=none:
