@@ -75,6 +75,8 @@ Run these subagents in parallel using the Task tool:
 - Task flow-next:docs-scout(<request>)
 - Task flow-next:github-scout(<request>) - cross-repo code search via gh CLI
 - Task flow-next:memory-scout(<request>) - **only if memory.enabled is true**
+- Task flow-next:epic-scout(<request>) - finds dependencies on existing open epics
+- Task flow-next:docs-gap-scout(<request>) - identifies docs that may need updates
 
 **If user chose repo-scout (default/faster)** OR rp-cli unavailable:
 Run these subagents in parallel using the Task tool:
@@ -83,6 +85,8 @@ Run these subagents in parallel using the Task tool:
 - Task flow-next:docs-scout(<request>)
 - Task flow-next:github-scout(<request>) - cross-repo code search via gh CLI
 - Task flow-next:memory-scout(<request>) - **only if memory.enabled is true**
+- Task flow-next:epic-scout(<request>) - finds dependencies on existing open epics
+- Task flow-next:docs-gap-scout(<request>) - identifies docs that may need updates
 
 Example batch payload:
 ```json
@@ -103,6 +107,8 @@ Must capture:
 - External docs links
 - Project conventions (CLAUDE.md, CONTRIBUTING, etc)
 - Architecture patterns and data flow (especially with context-scout)
+- Epic dependencies (from epic-scout)
+- Doc updates needed (from docs-gap-scout) - add to task acceptance criteria
 
 ## Step 2: Stakeholder & scope check
 
@@ -160,6 +166,17 @@ Default to standard unless complexity demands more or less.
    <plan content here>
    EOF
    ```
+   - Set epic dependencies from epic-scout (if any):
+     ```bash
+     # For each dependency found by epic-scout:
+     $FLOWCTL epic add-dep <epic-id> <dependency-epic-id> --json
+     ```
+   - Report findings at end of planning (no user prompt needed):
+     ```
+     Epic dependencies set:
+     - fn-N → fn-2 (Auth): Uses authService from fn-2.1
+     - fn-N → fn-5 (DB): Extends User model
+     ```
    - Create/update child tasks as needed
 
 2. If task ID (fn-N.M):
@@ -204,13 +221,19 @@ Default to standard unless complexity demands more or less.
    EOF
    ```
 
-4. Create child tasks:
+4. Set epic dependencies (from epic-scout findings):
+   ```bash
+   # For each dependency found by epic-scout:
+   $FLOWCTL epic add-dep <epic-id> <dependency-epic-id> --json
+   ```
+
+5. Create child tasks:
    ```bash
    # For each task:
    $FLOWCTL task create --epic <epic-id> --title "<Task title>" --json
    ```
 
-5. Write task specs (use combined set-spec):
+6. Write task specs (use combined set-spec):
    ```bash
    # For each task - single call sets both sections
    # Write description and acceptance to temp files, then:
@@ -237,13 +260,17 @@ Default to standard unless complexity demands more or less.
    - [ ] Criterion 2
    ```
 
-6. Add dependencies:
+   **Doc updates**: If docs-gap-scout flagged updates, add them to relevant task acceptance criteria.
+
+   **Doc updates**: If docs-gap-scout flagged updates, add them to task acceptance criteria (e.g., "Update README usage section").
+
+7. Add dependencies:
    ```bash
    # If task B depends on task A:
    $FLOWCTL dep add <task-B-id> <task-A-id> --json
    ```
 
-7. Output current state:
+8. Output current state:
    ```bash
    $FLOWCTL show <epic-id> --json
    $FLOWCTL cat <epic-id>

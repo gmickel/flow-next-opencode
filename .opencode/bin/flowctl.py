@@ -77,7 +77,7 @@ def get_default_config() -> dict:
     """Return default config structure."""
     return {
         "memory": {"enabled": False},
-        "planSync": {"enabled": False},
+        "planSync": {"enabled": False, "crossEpic": False},
         "review": {"backend": None},
     }
 
@@ -278,6 +278,7 @@ def build_chat_payload(
     mode: str,
     new_chat: bool = False,
     chat_name: Optional[str] = None,
+    chat_id: Optional[str] = None,
     selected_paths: Optional[list[str]] = None,
 ) -> str:
     payload: dict[str, Any] = {
@@ -288,6 +289,8 @@ def build_chat_payload(
         payload["new_chat"] = True
     if chat_name:
         payload["chat_name"] = chat_name
+    if chat_id:
+        payload["chat_id"] = chat_id
     if selected_paths:
         payload["selected_paths"] = selected_paths
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
@@ -3890,6 +3893,7 @@ def cmd_prep_chat(args: argparse.Namespace) -> None:
         mode=args.mode,
         new_chat=args.new_chat,
         chat_name=args.chat_name,
+        chat_id=args.chat_id,
         selected_paths=args.selected_paths,
     )
 
@@ -3996,19 +4000,59 @@ def cmd_rp_ensure_workspace(args: argparse.Namespace) -> None:
 def cmd_rp_builder(args: argparse.Namespace) -> None:
     window = args.window
     summary = args.summary
+    response_type = getattr(args, "response_type", None)
+
+    # Build builder command with optional response-type
+    builder_expr = f"builder {json.dumps(summary)}"
+    if response_type:
+        builder_expr += f" --response-type {response_type}"
+
     cmd = [
         "-w",
         str(window),
+        "--raw-json" if response_type else "",
         "-e",
-        f"builder {json.dumps(summary)}",
+        builder_expr,
     ]
+    cmd = [c for c in cmd if c]
     res = run_rp_cli(cmd)
     output = (res.stdout or "") + ("\n" + res.stderr if res.stderr else "")
-    tab = parse_builder_tab(output)
-    if args.json:
-        print(json.dumps({"window": window, "tab": tab}))
+
+    if response_type == "review":
+        try:
+            data = json.loads(res.stdout or "{}")
+            tab = data.get("tab_id", "")
+            chat_id = data.get("review", {}).get("chat_id", "")
+            review_response = data.get("review", {}).get("response", "")
+            if args.json:
+                print(
+                    json.dumps(
+                        {
+                            "window": window,
+                            "tab": tab,
+                            "chat_id": chat_id,
+                            "review": review_response,
+                            "file_count": data.get("file_count", 0),
+                            "total_tokens": data.get("total_tokens", 0),
+                        }
+                    )
+                )
+            else:
+                print(f"T={tab} CHAT_ID={chat_id}")
+                if review_response:
+                    print(review_response)
+        except json.JSONDecodeError:
+            tab = parse_builder_tab(output)
+            if args.json:
+                print(json.dumps({"window": window, "tab": tab, "error": "parse_failed"}))
+            else:
+                print(tab)
     else:
-        print(tab)
+        tab = parse_builder_tab(output)
+        if args.json:
+            print(json.dumps({"window": window, "tab": tab}))
+        else:
+            print(tab)
 
 
 def cmd_rp_prompt_get(args: argparse.Namespace) -> None:
@@ -4049,11 +4093,14 @@ def cmd_rp_select_add(args: argparse.Namespace) -> None:
 
 def cmd_rp_chat_send(args: argparse.Namespace) -> None:
     message = read_text_or_exit(Path(args.message_file), "Message file", use_json=False)
+    chat_id_arg = getattr(args, "chat_id", None)
+    mode = getattr(args, "mode", "chat") or "chat"
     payload = build_chat_payload(
         message=message,
-        mode="chat",
+        mode=mode,
         new_chat=args.new_chat,
         chat_name=args.chat_name,
+        chat_id=chat_id_arg,
         selected_paths=args.selected_paths,
     )
     cmd = [
@@ -4094,11 +4141,14 @@ def cmd_rp_setup_review(args: argparse.Namespace) -> None:
 
     Note: ensure-workspace removed - if user opens RP on a folder, workspace
     already exists. pick-window matches by folder path.
+
+    Requires RepoPrompt 1.6.0+ for --response-type review.
     """
     import hashlib
 
     repo_root = os.path.realpath(args.repo_root)
     summary = args.summary
+    response_type = getattr(args, "response_type", None)
 
     # Step 1: pick-window
     roots = normalize_repo_root(repo_root)
@@ -4125,7 +4175,23 @@ def cmd_rp_setup_review(args: argparse.Namespace) -> None:
                 break
 
     if win_id is None:
-        error_exit("No RepoPrompt window matches repo root", use_json=False, code=2)
+        if getattr(args, "create", False):
+            ws_name = os.path.basename(repo_root)
+            create_cmd = f"workspace create {shlex.quote(ws_name)} --new-window --folder-path {shlex.quote(repo_root)}"
+            create_res = run_rp_cli(["--raw-json", "-e", create_cmd])
+            try:
+                data = json.loads(create_res.stdout or "{}")
+                win_id = data.get("window_id")
+            except json.JSONDecodeError:
+                pass
+            if not win_id:
+                error_exit(
+                    f"Failed to create RP window: {create_res.stderr or create_res.stdout}",
+                    use_json=False,
+                    code=2,
+                )
+        else:
+            error_exit("No RepoPrompt window matches repo root", use_json=False, code=2)
 
     # Write state file for ralph-guard verification
     repo_hash = hashlib.sha256(repo_root.encode()).hexdigest()[:16]
@@ -4133,26 +4199,61 @@ def cmd_rp_setup_review(args: argparse.Namespace) -> None:
     state_file.write_text(f"{win_id}\n{repo_root}\n")
 
     # Step 2: builder
+    builder_expr = f"builder {json.dumps(summary)}"
+    if response_type:
+        builder_expr += f" --response-type {response_type}"
+
     builder_cmd = [
         "-w",
         str(win_id),
+        "--raw-json" if response_type else "",
         "-e",
-        f"builder {json.dumps(summary)}",
+        builder_expr,
     ]
+    builder_cmd = [c for c in builder_cmd if c]
     builder_res = run_rp_cli(builder_cmd)
     output = (builder_res.stdout or "") + (
         "\n" + builder_res.stderr if builder_res.stderr else ""
     )
-    tab = parse_builder_tab(output)
+    if response_type == "review":
+        try:
+            data = json.loads(builder_res.stdout or "{}")
+            tab = data.get("tab_id", "")
+            chat_id = data.get("review", {}).get("chat_id", "")
+            review_response = data.get("review", {}).get("response", "")
 
-    if not tab:
-        error_exit("Builder did not return a tab id", use_json=False, code=2)
+            if not tab:
+                error_exit("Builder did not return a tab id", use_json=False, code=2)
 
-    # Output
-    if args.json:
-        print(json.dumps({"window": win_id, "tab": tab, "repo_root": repo_root}))
+            if args.json:
+                print(
+                    json.dumps(
+                        {
+                            "window": win_id,
+                            "tab": tab,
+                            "chat_id": chat_id,
+                            "review": review_response,
+                            "repo_root": repo_root,
+                            "file_count": data.get("file_count", 0),
+                            "total_tokens": data.get("total_tokens", 0),
+                        }
+                    )
+                )
+            else:
+                print(f"W={win_id} T={tab} CHAT_ID={chat_id}")
+                if review_response:
+                    print(review_response)
+        except json.JSONDecodeError:
+            error_exit("Failed to parse builder review response", use_json=False, code=2)
     else:
-        print(f"W={win_id} T={tab}")
+        tab = parse_builder_tab(output)
+        if not tab:
+            error_exit("Builder did not return a tab id", use_json=False, code=2)
+
+        if args.json:
+            print(json.dumps({"window": win_id, "tab": tab, "repo_root": repo_root}))
+        else:
+            print(f"W={win_id} T={tab}")
 
 
 # --- Codex Commands ---
@@ -5259,10 +5360,14 @@ def main() -> None:
         "--message-file", required=True, help="File containing message text"
     )
     p_prep.add_argument(
-        "--mode", default="chat", choices=["chat", "ask"], help="Chat mode"
+        "--mode",
+        default="chat",
+        choices=["chat", "ask", "review", "plan", "edit"],
+        help="Chat mode",
     )
     p_prep.add_argument("--new-chat", action="store_true", help="Start new chat")
     p_prep.add_argument("--chat-name", help="Name for new chat")
+    p_prep.add_argument("--chat-id", help="Chat id (continue existing)")
     p_prep.add_argument(
         "--selected-paths", nargs="*", help="Files to include in context"
     )
@@ -5318,6 +5423,11 @@ def main() -> None:
     p_rp_builder = rp_sub.add_parser("builder", help="Run builder and return tab")
     p_rp_builder.add_argument("--window", type=int, required=True, help="Window id")
     p_rp_builder.add_argument("--summary", required=True, help="Builder summary")
+    p_rp_builder.add_argument(
+        "--response-type",
+        choices=["review"],
+        help="RP 1.6.0+ response type",
+    )
     p_rp_builder.add_argument("--json", action="store_true", help="JSON output")
     p_rp_builder.set_defaults(func=cmd_rp_builder)
 
@@ -5349,6 +5459,13 @@ def main() -> None:
     p_rp_chat.add_argument("--message-file", required=True, help="Message file")
     p_rp_chat.add_argument("--new-chat", action="store_true", help="Start new chat")
     p_rp_chat.add_argument("--chat-name", help="Chat name (with --new-chat)")
+    p_rp_chat.add_argument("--chat-id", help="Chat id (continue existing)")
+    p_rp_chat.add_argument(
+        "--mode",
+        choices=["chat", "review", "plan", "edit"],
+        default="chat",
+        help="Chat mode",
+    )
     p_rp_chat.add_argument(
         "--selected-paths", nargs="*", help="Override selected paths"
     )
@@ -5368,6 +5485,16 @@ def main() -> None:
     )
     p_rp_setup.add_argument("--repo-root", required=True, help="Repo root path")
     p_rp_setup.add_argument("--summary", required=True, help="Builder summary")
+    p_rp_setup.add_argument(
+        "--response-type",
+        choices=["review"],
+        help="RP 1.6.0+ response type",
+    )
+    p_rp_setup.add_argument(
+        "--create",
+        action="store_true",
+        help="Auto-create window if none matches repo root",
+    )
     p_rp_setup.add_argument("--json", action="store_true", help="JSON output")
     p_rp_setup.set_defaults(func=cmd_rp_setup_review)
 

@@ -12,6 +12,8 @@ Conduct a John Carmack-level review of implementation changes on the current bra
 **Role**: Code Review Coordinator (NOT the reviewer)
 **Backends**: OpenCode (opencode) or RepoPrompt (rp)
 
+**⚠️ RepoPrompt 1.6.0+ Required (rp backend)**: The RP backend uses builder review mode. Check version: `rp-cli --version`.
+
 **CRITICAL: flowctl is BUNDLED — NOT installed globally.** `which flowctl` will fail (expected). Always use:
 ```bash
 ROOT="$(git rev-parse --show-toplevel)"

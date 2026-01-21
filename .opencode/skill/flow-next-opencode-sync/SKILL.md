@@ -36,6 +36,14 @@ Parse $ARGUMENTS for:
 - First positional arg = `ID`
 - `--dry-run` flag = `DRY_RUN` (true/false)
 
+Get cross-epic config (defaults to false):
+```bash
+CROSS_EPIC="$($FLOWCTL config get planSync.crossEpic --json 2>/dev/null | jq -r '.value // empty')"
+if [[ -z "$CROSS_EPIC" || "$CROSS_EPIC" == "null" ]]; then
+  CROSS_EPIC="false"
+fi
+```
+
 **Validate ID format:**
 - Must start with `fn-`
 - If no ID: "Usage: /flow-next:sync <id> [--dry-run]"
@@ -108,6 +116,7 @@ FLOWCTL: $OPENCODE_DIR/bin/flowctl
 EPIC_ID: <epic id>
 DOWNSTREAM_TASK_IDS: <comma-separated list>
 DRY_RUN: <true|false>
+CROSS_EPIC: <true|false>
 
 <if DRY_RUN>
 DRY RUN MODE: Report changes but do NOT edit files.

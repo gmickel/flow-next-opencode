@@ -110,147 +110,122 @@ If `VERDICT=NEEDS_WORK`:
 
 Use when `BACKEND="rp"`.
 
-### Atomic Setup Block
+**Requires RepoPrompt 1.6.0+** for the builder review mode. Check version with `rp-cli --version`.
+
+### Phase 1: Identify Changes (RP)
 
 ```bash
-# Atomic: pick-window + builder
-eval "$($FLOWCTL rp setup-review --repo-root \"$REPO_ROOT\" --summary \"Review implementation: <summary>\")"
+TASK_ID="${1:-}"
+BRANCH="$(git branch --show-current)"
 
-# Verify we have W and T
-if [[ -z "${W:-}" || -z "${T:-}" ]]; then
+COMMITS="$(git log main..HEAD --oneline 2>/dev/null || git log master..HEAD --oneline)"
+CHANGED_FILES="$(git diff main..HEAD --name-only 2>/dev/null || git diff master..HEAD --name-only)"
+```
+
+### Phase 2: Build Review Instructions (RP)
+
+Build XML-structured instructions for the builder review mode:
+
+```bash
+cat > /tmp/review-instructions.txt << EOF
+<task>Review changes on the current branch for correctness, simplicity, and potential issues.
+
+Focus on:
+- Correctness - Logic errors, spec compliance
+- Simplicity - Over-engineering, unnecessary complexity
+- Edge cases - Failure modes, boundary conditions
+- Security - Injection, auth gaps
+
+Only flag issues in the changed code - not pre-existing patterns.
+</task>
+
+<context>
+Branch: $BRANCH
+Commits:
+$COMMITS
+
+Changed files:
+$CHANGED_FILES
+$([ -n "$TASK_ID" ] && echo "Task: $TASK_ID")
+</context>
+
+<discovery_agent-guidelines>
+Focus on directories containing the changed files. Include git diffs for the commits.
+</discovery_agent-guidelines>
+EOF
+```
+
+### Phase 3: Execute Review (RP)
+
+Use `setup-review` with `--response-type review` (RP 1.6.0+). The builder's discovery agent automatically:
+- Selects relevant files and git diffs
+- Analyzes code with full codebase context
+- Returns structured review findings
+
+```bash
+# Run builder review mode
+REVIEW_OUTPUT=$($FLOWCTL rp setup-review \
+  --repo-root "$REPO_ROOT" \
+  --summary "$(cat /tmp/review-instructions.txt)" \
+  --response-type review \
+  --json)
+
+# Parse output
+W=$(echo "$REVIEW_OUTPUT" | jq -r '.window')
+T=$(echo "$REVIEW_OUTPUT" | jq -r '.tab')
+CHAT_ID=$(echo "$REVIEW_OUTPUT" | jq -r '.chat_id')
+REVIEW_FINDINGS=$(echo "$REVIEW_OUTPUT" | jq -r '.review')
+
+if [[ -z "$W" || -z "$T" ]]; then
   echo "<promise>RETRY</promise>"
   exit 0
 fi
 
-echo "Setup complete: W=$W T=$T"
+echo "Setup complete: W=$W T=$T CHAT_ID=$CHAT_ID"
+echo "Review findings:"
+echo "$REVIEW_FINDINGS"
 ```
 
-If this block fails, output `<promise>RETRY</promise>` and stop. Do not improvise.
-
----
-
-## Phase 1: Identify Changes (RP)
+The builder returns review findings but **not a verdict tag**. Request verdict via follow-up:
 
 ```bash
-git branch --show-current
-git log main..HEAD --oneline 2>/dev/null || git log master..HEAD --oneline
-git diff main..HEAD --name-only 2>/dev/null || git diff master..HEAD --name-only
-```
+cat > /tmp/verdict-request.md << 'EOF'
+Based on your review findings above, provide your final verdict.
 
----
-
-## Phase 2: Augment Selection (RP)
-
-```bash
-# See what builder selected
-$FLOWCTL rp select-get --window "$W" --tab "$T"
-
-# Always add changed files
-$FLOWCTL rp select-add --window "$W" --tab "$T" path/to/changed/files...
-```
-
----
-
-## Phase 3: Execute Review (RP)
-
-### Build combined prompt
-
-Get builder's handoff:
-```bash
-HANDOFF="$($FLOWCTL rp prompt-get --window "$W" --tab "$T")"
-```
-
-Write combined prompt:
-```bash
-cat > /tmp/review-prompt.md << 'EOF'
-[PASTE HANDOFF HERE]
-
----
-
-## IMPORTANT: File Contents
-RepoPrompt includes the actual source code of selected files in a `<file_contents>` XML section at the end of this message. You MUST:
-1. Locate the `<file_contents>` section
-2. Read and analyze the actual source code within it
-3. Base your review on the code, not summaries or descriptions
-
-If you cannot find `<file_contents>`, ask for the files to be re-attached before proceeding.
-
-## Review Focus
-[USER'S FOCUS AREAS]
-
-## Review Criteria
-
-Conduct a John Carmack-level review:
-
-1. **Correctness** - Matches spec? Logic errors?
-2. **Simplicity** - Simplest solution? Over-engineering?
-3. **DRY** - Duplicated logic? Existing patterns?
-4. **Architecture** - Data flow? Clear boundaries?
-5. **Edge Cases** - Failure modes? Race conditions?
-6. **Tests** - Adequate coverage? Testing behavior?
-7. **Security** - Injection? Auth gaps?
-
-## Scenario Exploration (for changed code only)
-
-Walk through these scenarios mentally for any new/modified code paths:
-
-- [ ] Happy path - Normal operation with valid inputs
-- [ ] Invalid inputs - Null, empty, malformed data
-- [ ] Boundary conditions - Min/max values, empty collections
-- [ ] Concurrent access - Race conditions, deadlocks
-- [ ] Network issues - Timeouts, partial failures
-- [ ] Resource exhaustion - Memory, disk, connections
-- [ ] Security attacks - Injection, overflow, DoS vectors
-- [ ] Data corruption - Partial writes, inconsistency
-- [ ] Cascading failures - Downstream service issues
-
-Only flag issues that apply to the **changed code** - not pre-existing patterns.
-
-## Output Format
-
-For each issue:
-- **Severity**: Critical / Major / Minor / Nitpick
-- **Location**: File + line or area
-- **Problem**: What's wrong
-- **Suggestion**: How to fix
-
-**REQUIRED**: You MUST end your response with exactly one verdict tag. This is mandatory:
+**REQUIRED**: End with exactly one verdict tag:
 `<verdict>SHIP</verdict>` or `<verdict>NEEDS_WORK</verdict>` or `<verdict>MAJOR_RETHINK</verdict>`
-
-Do NOT skip this tag. The automation depends on it.
 EOF
+
+$FLOWCTL rp chat-send --window "$W" --tab "$T" \
+  --message-file /tmp/verdict-request.md \
+  --chat-id "$CHAT_ID" \
+  --mode review
 ```
 
-### Send to RepoPrompt
+**WAIT** for response. Extract verdict from response.
 
-```bash
-$FLOWCTL rp chat-send --window "$W" --tab "$T" --message-file /tmp/review-prompt.md --new-chat --chat-name "Impl Review: [BRANCH]"
-```
-
-**WAIT** for response. Takes 1-5+ minutes.
-
----
-
-## Phase 4: Receipt + Status (RP)
-
-### Write receipt (if REVIEW_RECEIPT_PATH set)
+### Phase 4: Receipt + Status (RP)
 
 ```bash
 if [[ -n "${REVIEW_RECEIPT_PATH:-}" ]]; then
   ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   mkdir -p "$(dirname "$REVIEW_RECEIPT_PATH")"
   cat > "$REVIEW_RECEIPT_PATH" <<EOF
-{"type":"impl_review","id":"<TASK_ID>","mode":"rp","timestamp":"$ts"}
+{"type":"impl_review","id":"$TASK_ID","mode":"rp","timestamp":"$ts","chat_id":"$CHAT_ID"}
 EOF
   echo "REVIEW_RECEIPT_WRITTEN: $REVIEW_RECEIPT_PATH"
 fi
 ```
+
+If no verdict tag in response, output `<promise>RETRY</promise>` and stop.
 
 ---
 
 ## Fix Loop (RP)
 
 **CRITICAL: You MUST fix the code BEFORE re-reviewing. Never re-review without making changes.**
+
+**MAX ITERATIONS**: Limit fix+re-review cycles to **${MAX_REVIEW_ITERATIONS:-3}** iterations (default 3, configurable in Ralph's config.env). If still NEEDS_WORK after max rounds, output `<promise>RETRY</promise>` and stop — let the next Ralph iteration start fresh.
 
 If verdict is NEEDS_WORK:
 
@@ -286,7 +261,7 @@ If verdict is NEEDS_WORK:
    **REQUIRED**: End with `<verdict>SHIP</verdict>` or `<verdict>NEEDS_WORK</verdict>` or `<verdict>MAJOR_RETHINK</verdict>`
    EOF
 
-   $FLOWCTL rp chat-send --window "$W" --tab "$T" --message-file /tmp/re-review.md
+   $FLOWCTL rp chat-send --window "$W" --tab "$T" --message-file /tmp/re-review.md --chat-id "$CHAT_ID" --mode review
    ```
 6. **Repeat** until Ship
 
