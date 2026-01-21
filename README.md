@@ -139,7 +139,7 @@ Interview → Plan → Work
 ```
 
 1. **Interview first** — `/flow-next:interview "your rough idea"` asks deep questions to surface requirements, edge cases, and decisions you haven’t thought about
-2. **Plan** — `/flow-next:plan fn-1` researches best practices, current docs, repo patterns, then splits into properly-sized tasks
+2. **Plan** — `/flow-next:plan fn-1` researches best practices, current docs, repo patterns, scans open epics for dependencies, flags doc updates, then splits into properly-sized tasks
 3. **Work** — `/flow-next:work fn-1` executes with re-anchoring and reviews
 
 #### Well-written spec or PRD
@@ -148,7 +148,7 @@ Interview → Plan → Work
 Plan → Interview → Work
 ```
 
-1. **Plan first** — `/flow-next:plan specs/my-feature.md` researches best practices and current patterns, then breaks your spec into epic + tasks
+1. **Plan first** — `/flow-next:plan specs/my-feature.md` researches best practices, current patterns, epic dependencies, and doc updates, then breaks your spec into epic + tasks
 2. **Interview after** — `/flow-next:interview fn-1` runs deep questions against the plan to catch edge cases, missing requirements, or assumptions
 3. **Work** — `/flow-next:work fn-1` executes
 
@@ -334,6 +334,11 @@ Enable auto-sync after each task (optional):
 flowctl config set planSync.enabled true
 ```
 
+Optional cross-epic sync (off by default):
+```bash
+flowctl config set planSync.crossEpic true
+```
+
 ### Dependency Graphs
 
 Tasks declare blockers; `flowctl ready` shows what can start. Nothing executes until dependencies resolve.
@@ -366,6 +371,8 @@ Change those if you want a different model or effort.
 #### RepoPrompt (Optional)
 
 [RepoPrompt](https://repoprompt.com/?atp=KJbuL4) provides the best review experience on macOS.
+
+**Requires RepoPrompt 1.6.0+** for the rp review backend (builder review mode).
 
 **Why use RepoPrompt:**
 * Best-in-class context builder for reviews (full file context, smart selection)

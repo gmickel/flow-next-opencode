@@ -372,10 +372,14 @@ Manage project configuration stored in `.flow/config.json`.
 # Get a config value
 flowctl config get memory.enabled [--json]
 flowctl config get review.backend [--json]
+flowctl config get planSync.enabled [--json]
+flowctl config get planSync.crossEpic [--json]
 
 # Set a config value
 flowctl config set memory.enabled true [--json]
 flowctl config set review.backend opencode [--json]  # rp, opencode, or none
+flowctl config set planSync.enabled true [--json]
+flowctl config set planSync.crossEpic true [--json]
 
 # Toggle boolean config
 flowctl config toggle memory.enabled [--json]
@@ -386,6 +390,8 @@ flowctl config toggle memory.enabled [--json]
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `memory.enabled` | bool | `false` | Enable memory system |
+| `planSync.enabled` | bool | `false` | Enable plan-sync after task completion |
+| `planSync.crossEpic` | bool | `false` | Also scan other open epics for stale references |
 | `review.backend` | string | auto | Default review backend (`rp`, `opencode`, `none`) |
 
 Auto-detect priority: `FLOW_REVIEW_BACKEND` env → config → available CLI.
@@ -426,6 +432,7 @@ EOF
 flowctl prep-chat \
   --message-file /tmp/prompt.md \
   --mode chat \
+  [--chat-id "<id>"] \
   [--new-chat] \
   [--chat-name "Review Name"] \
   [--selected-paths file1.ts file2.ts] \
@@ -437,7 +444,8 @@ flowctl rp chat-send --window W --tab T --message-file /tmp/prompt.md
 
 Options:
 - `--message-file FILE` (required): File containing the message text
-- `--mode {chat,ask}`: Chat mode (default: chat)
+- `--mode {chat,ask,review,plan,edit}`: Chat mode (default: chat)
+- `--chat-id ID`: Continue existing chat
 - `--new-chat`: Start a new chat session
 - `--chat-name NAME`: Name for the new chat
 - `--selected-paths FILE...`: Files to include in context (for follow-ups)
@@ -452,14 +460,18 @@ Output (stdout or file):
 
 RepoPrompt wrappers (preferred for reviews):
 
+Requires RepoPrompt 1.6.0+ for `--response-type review`.
+
 ```bash
 flowctl rp pick-window --repo-root "$REPO_ROOT"
 flowctl rp ensure-workspace --window "$W" --repo-root "$REPO_ROOT"
 flowctl rp builder --window "$W" --summary "Review a plan to ..."
+flowctl rp builder --window "$W" --summary "Review implementation..." --response-type review
+flowctl rp setup-review --repo-root "$REPO_ROOT" --summary "Review implementation..." --response-type review --json
 flowctl rp prompt-get --window "$W" --tab "$T"
 flowctl rp prompt-set --window "$W" --tab "$T" --message-file /tmp/review-prompt.md
 flowctl rp select-add --window "$W" --tab "$T" path/to/file
-flowctl rp chat-send --window "$W" --tab "$T" --message-file /tmp/review-prompt.md
+flowctl rp chat-send --window "$W" --tab "$T" --message-file /tmp/review-prompt.md --chat-id "$CHAT_ID" --mode review
 flowctl rp prompt-export --window "$W" --tab "$T" --out /tmp/export.md
 ```
 

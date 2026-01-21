@@ -19,6 +19,18 @@ FLOWCTL="$OPENCODE_DIR/bin/flowctl"
 $FLOWCTL <command>
 ```
 
+## Pre-check: Local setup version
+
+If `.flow/meta.json` exists and has `setup_version`, compare to local OpenCode version:
+```bash
+SETUP_VER=$(jq -r '.setup_version // empty' .flow/meta.json 2>/dev/null)
+OPENCODE_VER=$(cat "$OPENCODE_DIR/version" 2>/dev/null || echo "unknown")
+if [[ -n "$SETUP_VER" && "$OPENCODE_VER" != "unknown" && "$SETUP_VER" != "$OPENCODE_VER" ]]; then
+  echo "Flow-Next updated to v${OPENCODE_VER}. Run /flow-next:setup to refresh local scripts (current: v${SETUP_VER})."
+fi
+```
+Continue regardless (non-blocking).
+
 **Role**: product-minded planner with strong repo awareness.
 **Goal**: produce an epic with tasks that match existing conventions and reuse points.
 **Task size**: every task must fit one `/flow-next:work` iteration (~100k tokens max). If it won't, split it.

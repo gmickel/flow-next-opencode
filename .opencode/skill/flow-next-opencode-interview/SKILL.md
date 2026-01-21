@@ -17,6 +17,18 @@ FLOWCTL="$OPENCODE_DIR/bin/flowctl"
 $FLOWCTL <command>
 ```
 
+## Pre-check: Local setup version
+
+If `.flow/meta.json` exists and has `setup_version`, compare to local OpenCode version:
+```bash
+SETUP_VER=$(jq -r '.setup_version // empty' .flow/meta.json 2>/dev/null)
+OPENCODE_VER=$(cat "$OPENCODE_DIR/version" 2>/dev/null || echo "unknown")
+if [[ -n "$SETUP_VER" && "$OPENCODE_VER" != "unknown" && "$SETUP_VER" != "$OPENCODE_VER" ]]; then
+  echo "Flow-Next updated to v${OPENCODE_VER}. Run /flow-next:setup to refresh local scripts (current: v${SETUP_VER})."
+fi
+```
+Continue regardless (non-blocking).
+
 **Role**: technical interviewer, spec refiner
 **Goal**: extract complete implementation details through deep questioning (40+ questions typical)
 
@@ -60,63 +72,67 @@ FLOWCTL="$OPENCODE_DIR/bin/flowctl"
    - Read file contents
    - If file doesn't exist, ask user to provide valid path
 
+4. **New idea text**: everything else
+   - Create a new epic stub and refine requirements
+   - Do NOT create tasks (that's /flow-next:plan)
+
 ## Interview Process
 
-Use the **question** tool for all questions. Group 2-4 questions per tool call. Expect 40+ total for complex specs. Wait for answers before continuing.
+Ask questions in **plain text** (no question tool). Group 5-8 questions per message. Expect 40+ total for complex specs. Wait for answers before continuing.
 
 Rules:
-- Each question must include: `header` (<=12 chars), `question`, and `options` (2-5).
-- `custom` defaults to true, so users can type a custom answer.
-- Keep option labels short (1-5 words) and add a brief `description`.
-- Prefer concrete options; include “Not sure” when ambiguous.
+- Keep questions short and concrete
+- Offer 2-4 options when helpful
+- Include “Not sure” when ambiguous
+- Number questions for easy replies
 
-Example tool call (schema only):
+Example:
 ```
-question({
-  "questions": [
-    {
-      "header": "Header",
-      "question": "Where should the badge appear?",
-      "options": [
-        {"label": "Left", "description": "Near logo"},
-        {"label": "Right", "description": "Near user menu"},
-        {"label": "Center", "description": "Centered"},
-        {"label": "Not sure", "description": "Decide based on layout"}
-      ]
-    }
-  ]
-})
+1) Primary user goal?
+2) Platforms: web, iOS, Android, desktop?
+3) Auth required? (yes/no/unknown)
+4) Performance targets? (p95 ms)
+5) Edge cases you already know?
 ```
 
 ## Question Categories
 
 Read [questions.md](questions.md) for all question categories and interview guidelines.
 
+## NOT in scope (defer to /flow-next:plan)
+
+- Research scouts (codebase analysis)
+- File/line references
+- Task creation (interview refines requirements, plan creates tasks)
+- Task sizing (S/M/L)
+- Dependency ordering
+- Phased implementation details
+
 ## Write Refined Spec
 
-After interview complete, write everything back.
+After interview complete, write everything back — scope depends on input type.
 
-### For Flow Epic ID
+### For NEW IDEA (text input, no Flow ID)
 
-Update epic spec using stdin heredoc (preferred):
+Create epic with interview output. **Do NOT create tasks** — that's `/flow-next:plan`'s job.
+
 ```bash
+$FLOWCTL epic create --title "..." --json
 $FLOWCTL epic set-plan <id> --file - --json <<'EOF'
 # Epic Title
 
 ## Problem
 Clear problem statement
 
-## Approach
-Technical approach with specifics, key decisions from interview
+## Key Decisions
+Decisions made during interview (e.g., "Use OAuth not SAML", "Support mobile + web")
 
 ## Edge Cases
 - Edge case 1
 - Edge case 2
 
-## Quick commands
-```bash
-# smoke test command
-```
+## Open Questions
+Unresolved items that need research during planning
 
 ## Acceptance
 - [ ] Criterion 1
@@ -124,33 +140,82 @@ Technical approach with specifics, key decisions from interview
 EOF
 ```
 
-Create/update tasks if interview revealed breakdown:
+Then suggest: "Run `/flow-next:plan fn-N` to research best practices and create tasks."
+
+### For Flow Epic ID
+
+**First check if tasks exist:**
 ```bash
-$FLOWCTL task create --epic <id> --title "..." --json
-# Use set-spec for combined description + acceptance (fewer writes)
-$FLOWCTL task set-spec <task-id> --description /tmp/desc.md --acceptance /tmp/acc.md --json
+$FLOWCTL tasks --epic <id> --json
+```
+
+**If tasks exist:** Only update the epic spec (add edge cases, clarify requirements). **Do NOT touch task specs** — plan already created them.
+
+**If no tasks:** Update epic spec, then suggest `/flow-next:plan`.
+
+```bash
+$FLOWCTL epic set-plan <id> --file - --json <<'EOF'
+# Epic Title
+
+## Problem
+Clear problem statement
+
+## Key Decisions
+Decisions made during interview
+
+## Edge Cases
+- Edge case 1
+- Edge case 2
+
+## Open Questions
+Unresolved items
+
+## Acceptance
+- [ ] Criterion 1
+- [ ] Criterion 2
+EOF
 ```
 
 ### For Flow Task ID
 
-Update task using combined set-spec (preferred) or separate calls:
+**First check if task has existing spec from planning:**
+```bash
+$FLOWCTL cat <id>
+```
+
+**If task has substantial planning content** (file refs, sizing, approach):
+- **Do NOT overwrite** — planning detail would be lost
+- Only add new acceptance criteria discovered in interview:
+  ```bash
+  $FLOWCTL task set-acceptance <id> --file /tmp/acc.md --json
+  ```
+- Or suggest interviewing the epic instead: `/flow-next:interview <epic-id>`
+
+**If task is minimal** (just title, empty or stub description):
+- Update task with interview findings
+- Focus on **requirements**, not implementation details
+
 ```bash
 # Preferred: combined set-spec (2 writes instead of 4)
 $FLOWCTL task set-spec <id> --description /tmp/desc.md --acceptance /tmp/acc.md --json
-
-# Or use stdin for description only:
-$FLOWCTL task set-description <id> --file - --json <<'EOF'
-Clear task description with technical details and edge cases from interview
-EOF
 ```
+
+Description should capture:
+- What needs to be accomplished (not how)
+- Edge cases discovered in interview
+- Constraints and requirements
+
+Do NOT add: file/line refs, sizing, implementation approach — that's plan's job.
 
 ### For File Path
 
 Rewrite the file with refined spec:
 - Preserve any existing structure/format
 - Add sections for areas covered in interview
-- Include technical details, edge cases, acceptance criteria
-- Keep it actionable and specific
+- Include edge cases, acceptance criteria
+- Keep it requirements-focused (what, not how)
+
+This is typically a pre-epic doc. After interview, suggest `/flow-next:plan <file>` to create epic + tasks.
 
 ## Completion
 

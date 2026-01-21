@@ -67,6 +67,16 @@
 - **Config defaults expanded** — Added `planSync.enabled` and `review.backend` to config schema
 - **`deep_merge()` for config** — Properly merges user config with defaults
 
+### Ported from upstream 0.14.0 → 0.16.0
+
+- **New planning scouts** — `epic-scout` (auto epic deps) + `docs-gap-scout` (doc update ACs)
+- **Plan-sync cross-epic option** — `planSync.crossEpic` (default false) + agent support
+- **RepoPrompt builder review mode** — `flowctl rp` supports `--response-type review`, `--chat-id`, `--mode`
+- **RP impl-review upgrade** — Uses builder review mode (**requires RepoPrompt 1.6.0+**)
+- **Interview boundary fixes** — No task creation, preserve task planning detail, clearer epic/task routing
+- **Setup version warning** — Plan/Interview warn when local setup is outdated
+- **Ralph defaults** — `WORKER_TIMEOUT` 3600s, `MAX_REVIEW_ITERATIONS` 3
+
 ### Other
 
 - Rename OpenCode skills to `flow-next-opencode-*` to avoid Claude skill collisions
