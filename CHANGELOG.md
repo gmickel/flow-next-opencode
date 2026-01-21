@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+**Restores parity with upstream Claude Code plugin (flow-next 0.17.0 + 0.17.1).**
+
+### Ported from upstream 0.17.0 → 0.17.1
+
+- **Runtime state store** — Task runtime fields move to `.git/flow-state/` (worktree-safe)
+- **StateStore with locking** — fcntl-based per-task locks for race-safe updates
+- **New commands** — `flowctl state-path` + `flowctl migrate-state [--clean]`
+- **Checkpoint schema v2** — Includes runtime state in save/restore
+- **Plan review includes task specs** — Both RP and OpenCode review epic + task specs for consistency
+- **Plan review consistency checks** — New criteria + anti-pattern: update epic without syncing tasks
+- **Task spec full replacement** — `flowctl task set-spec --file` (supports stdin)
+
 **Restores parity with upstream Claude Code plugin (flow-next 0.12.10 + 0.13.0).**
 
 ### Planning Workflow Changes (ported from upstream 0.13.0)

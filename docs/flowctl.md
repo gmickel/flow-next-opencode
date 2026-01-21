@@ -7,7 +7,7 @@ CLI for `.flow/` task tracking. Agents must use flowctl for all writes.
 ## Available Commands
 
 ```
-init, detect, epic, task, dep, show, epics, tasks, list, cat, ready, next, start, done, block, validate, config, memory, prep-chat, rp, opencode, codex, checkpoint, status
+init, detect, epic, task, dep, show, epics, tasks, list, cat, ready, next, start, done, block, validate, config, memory, prep-chat, rp, opencode, codex, checkpoint, status, state-path, migrate-state
 ```
 
 ## Multi-User Safety
@@ -20,6 +20,23 @@ Works out of the box for parallel branches. No setup required.
 - **Local validation**: `flowctl validate --all` catches issues before commit
 
 **Optional**: Add CI gate with `docs/ci-workflow-example.yml` to block bad PRs.
+
+## Runtime State (Worktrees)
+
+Runtime task state (status, assignee, evidence) lives in `.git/flow-state/` and is shared across worktrees.
+Definition files (title, deps, specs) remain in `.flow/` and are tracked in git.
+
+State directory resolution:
+1. `FLOW_STATE_DIR` env (override)
+2. `git --git-common-dir` + `/flow-state` (worktree-aware)
+3. `.flow/state` fallback (non-git)
+
+Useful commands:
+```bash
+flowctl state-path            # Show resolved state directory
+flowctl migrate-state         # Migrate existing repo (optional)
+flowctl migrate-state --clean # Migrate + remove runtime from tracked files
+```
 
 ## File Structure
 
@@ -36,6 +53,8 @@ Works out of the box for parallel branches. No setup required.
 │   └── flowctl.py
 └── usage.md           # (optional) CLI reference via /flow-next:setup
 ```
+
+Runtime state (status, assignee, evidence) is stored in `.git/flow-state/` (not tracked).
 
 Flowctl accepts schema v1 and v2; new fields are optional and defaulted.
 
@@ -147,13 +166,19 @@ flowctl task set-acceptance fn-1.2 --file accept.md [--json]
 
 ### task set-spec
 
-Set description and acceptance in one call (fewer writes).
+Set task spec (full replacement or section patches).
 
+Full replacement:
+```bash
+flowctl task set-spec fn-1.2 --file spec.md [--json]
+```
+
+Section patches:
 ```bash
 flowctl task set-spec fn-1.2 --description desc.md --acceptance accept.md [--json]
 ```
 
-Both `--description` and `--acceptance` are optional; supply one or both.
+`--description` and `--acceptance` are optional; supply one or both. Use `--file -` for stdin.
 
 ### task reset
 
@@ -554,7 +579,7 @@ References: src/middleware.py:45 (calls authenticate), tests/test_auth.py:12
 
 | Review | Criteria |
 |--------|----------|
-| Plan | Completeness, Feasibility, Clarity, Architecture, Risks, Scope, Testability |
+| Plan | Completeness, Feasibility, Clarity, Architecture, Risks, Scope, Testability, Consistency |
 | Impl | Correctness, Simplicity, DRY, Architecture, Edge Cases, Tests, Security |
 
 **Receipt schema (Ralph-compatible):**
@@ -586,7 +611,7 @@ flowctl checkpoint restore --epic fn-1 [--json]
 flowctl checkpoint delete --epic fn-1 [--json]
 ```
 
-Checkpoints preserve full epic + task state. Useful when compaction occurs during plan-review cycles.
+Checkpoints preserve full epic + task state (including runtime state). Useful when compaction occurs during plan-review cycles.
 
 ### status
 
@@ -602,6 +627,35 @@ Output:
 ```
 
 Human-readable output shows epic/task counts and any active Ralph runs.
+
+### state-path
+
+Show resolved runtime state directory (worktree-aware).
+
+```bash
+flowctl state-path [--json]
+flowctl state-path --task fn-1.2 [--json]
+```
+
+Example output:
+```json
+{"success": true, "state_dir": "/repo/.git/flow-state", "task_state_path": "/repo/.git/flow-state/tasks/fn-1.2.state.json"}
+```
+
+### migrate-state
+
+Migrate runtime state from tracked task definitions into the shared state directory.
+
+```bash
+flowctl migrate-state [--clean] [--json]
+```
+
+What it does:
+1. Scans `.flow/tasks/*.json` for runtime fields
+2. Writes runtime state to `.git/flow-state/tasks/*.state.json`
+3. Optional `--clean` removes runtime fields from tracked task JSONs
+
+Backward compatible: repos work without migration. Use `--clean` only if you want a clean diff.
 
 ## Ralph Receipts
 

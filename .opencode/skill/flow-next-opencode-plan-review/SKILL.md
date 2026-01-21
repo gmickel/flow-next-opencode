@@ -140,7 +140,9 @@ $FLOWCTL opencode plan-review "$EPIC_ID" --receipt "$RECEIPT_PATH"
 # Output includes VERDICT=SHIP|NEEDS_WORK|MAJOR_RETHINK
 ```
 
-On NEEDS_WORK: fix plan via `$FLOWCTL epic set-plan`, then re-run (receipt enables session continuity).
+On NEEDS_WORK: fix plan via `$FLOWCTL epic set-plan` AND sync affected task specs via `$FLOWCTL task set-spec`, then re-run (receipt enables session continuity).
+
+**Note**: `opencode plan-review` automatically includes task specs in the review prompt.
 
 ### RepoPrompt Backend
 
@@ -153,8 +155,12 @@ $FLOWCTL cat <id>
 eval "$($FLOWCTL rp setup-review --repo-root "$REPO_ROOT" --summary "Review plan for <EPIC_ID>: <summary>")"
 # Outputs W=<window> T=<tab>. If fails → <promise>RETRY</promise>
 
-# Step 3: Augment selection
+# Step 3: Augment selection - add epic AND task specs
 $FLOWCTL rp select-add --window "$W" --tab "$T" .flow/specs/<epic-id>.md
+# Add all task specs for this epic
+for task_spec in .flow/tasks/${EPIC_ID}.*.md; do
+  [[ -f "$task_spec" ]] && $FLOWCTL rp select-add --window "$W" --tab "$T" "$task_spec"
+done
 
 # Step 4: Build and send review prompt (see workflow.md)
 $FLOWCTL rp chat-send --window "$W" --tab "$T" --message-file /tmp/review-prompt.md --new-chat --chat-name "Plan Review: <EPIC_ID>"
@@ -169,10 +175,22 @@ $FLOWCTL epic set-plan-review-status <EPIC_ID> --status ship --json
 If verdict is NEEDS_WORK, loop internally until SHIP:
 
 1. **Parse issues** from reviewer feedback
-2. **Fix plan** via `$FLOWCTL epic set-plan <EPIC_ID> --file /tmp/updated-plan.md`
-3. **Re-review**:
+2. **Fix epic spec** via `$FLOWCTL epic set-plan <EPIC_ID> --file /tmp/updated-plan.md`
+3. **Sync affected task specs** - If epic changes affect task specs, update them:
+   ```bash
+   $FLOWCTL task set-spec <TASK_ID> --file - --json <<'EOF'
+   <updated task spec content>
+   EOF
+   ```
+   Task specs need updating when epic changes affect:
+   - State/enum values referenced in tasks
+   - Acceptance criteria that tasks implement
+   - Approach/design decisions tasks depend on
+   - Lock/retry/error handling semantics
+   - API signatures or type definitions
+4. **Re-review**:
    - **OpenCode**: re-run reviewer subagent with updated plan
    - **RP**: `$FLOWCTL rp chat-send --window "$W" --tab "$T" --message-file /tmp/re-review.md` (NO `--new-chat`)
-4. **Repeat** until `<verdict>SHIP</verdict>`
+5. **Repeat** until `<verdict>SHIP</verdict>`
 
 **CRITICAL**: For RP, re-reviews must stay in the SAME chat so reviewer has context. Only use `--new-chat` on the FIRST review.
