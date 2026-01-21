@@ -22,6 +22,8 @@ Task tracking for AI agents. All state lives in `.flow/`.
 └── meta.json           # Project metadata
 ```
 
+Runtime state (status, assignee, evidence) is stored in `.git/flow-state/` (not tracked).
+
 ## IDs
 
 - Epics: `fn-N` (e.g., fn-1, fn-2)
@@ -46,6 +48,8 @@ Task tracking for AI agents. All state lives in `.flow/`.
 # Status
 .flow/bin/flowctl ready --epic fn-1  # What's ready to work on
 .flow/bin/flowctl validate --all     # Check structure
+.flow/bin/flowctl state-path         # Show runtime state directory
+.flow/bin/flowctl migrate-state --clean  # Optional migration + cleanup
 
 # Create
 .flow/bin/flowctl epic create --title "..."

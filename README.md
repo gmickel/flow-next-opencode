@@ -288,6 +288,39 @@ Teams can work in parallel branches without coordination servers:
 * **Actor resolution**: Auto-detects from git email,  `FLOW_ACTOR` env, or `$USER`
 * **Local validation**: `flowctl validate --all` catches issues before commit
 
+### Parallel Worktrees
+
+Multiple agents can work simultaneously in different git worktrees, sharing task state:
+
+```bash
+# Main repo
+git worktree add ../feature-a fn-1-branch
+git worktree add ../feature-b fn-2-branch
+
+# Both worktrees share task state via .git/flow-state/
+cd ../feature-a && flowctl start fn-1.1   # Agent A claims task
+cd ../feature-b && flowctl start fn-2.1   # Agent B claims different task
+```
+
+**How it works:**
+- Runtime state (status, assignee, evidence) lives in `.git/flow-state/` — shared across worktrees
+- Definition files (title, description, deps) stay in `.flow/` — tracked in git
+- Per-task `fcntl` locking prevents race conditions
+
+**State directory resolution:**
+1. `FLOW_STATE_DIR` env (explicit override)
+2. `git --git-common-dir` + `/flow-state` (worktree-aware)
+3. `.flow/state` fallback (non-git or old git)
+
+**Commands:**
+```bash
+flowctl state-path                # Show resolved state directory
+flowctl migrate-state             # Migrate existing repo (optional)
+flowctl migrate-state --clean     # Migrate + remove runtime from tracked files
+```
+
+**Backward compatible** — existing repos work without migration. The merged read path automatically falls back to definition files when no state file exists.
+
 ### Zero Dependencies
 
 Everything is bundled:
@@ -515,6 +548,8 @@ This creates a complete audit trail: what was planned, what was done, how it was
     └── decisions.md
 ```
 
+Runtime state (status, assignee, evidence) is stored in `.git/flow-state/` (not tracked).
+
 ### ID Format
 
 * **Epic**: `fn-N-xxx` where `xxx` is a 3-character alphanumeric suffix
@@ -540,6 +575,7 @@ flowctl epic close fn-1
 flowctl task create --epic fn-1 --title "..." --deps fn-1.2,fn-1.3 --priority 10
 flowctl task set-description fn-1.1 --file desc.md
 flowctl task set-acceptance fn-1.1 --file accept.md
+flowctl task set-spec fn-1.1 --file spec.md
 
 flowctl dep add fn-1.3 fn-1.2
 
@@ -554,6 +590,9 @@ flowctl cat fn-1
 
 flowctl validate --epic fn-1
 flowctl validate --all
+
+flowctl state-path
+flowctl migrate-state --clean
 
 flowctl review-backend            # Get configured review backend (ASK if not set)
 flowctl config set review.backend opencode  # Set default backend
