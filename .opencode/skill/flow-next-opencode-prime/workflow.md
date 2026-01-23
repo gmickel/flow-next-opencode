@@ -191,12 +191,14 @@ Informational only. No fixes offered — address independently if desired.
 
 **If `--fix-all`**: Skip to Phase 6, apply all recommendations from Pillars 1-5.
 
-**CRITICAL**: Ask for consent in plain text. **Do NOT** use the Question tool. Wait for a reply before changing files.
+**CRITICAL**: You MUST use the `AskUserQuestion` tool for consent. Do NOT just print questions as text.
 
-Each question should:
-- Be a single category (Docs/Tooling/Testing/Environment)
-- Use lettered options (a/b/c/d) and allow multi-select (reply: "a,c")
+### Using AskUserQuestion Correctly
+
+The tool provides an interactive UI. Each question should:
+- Have a clear header (max 12 chars)
 - Explain what each option does and WHY it helps agents
+- Use `multiSelect: true` so users can pick multiple items
 - Include impact description for each option
 
 ### Question Structure
@@ -205,41 +207,103 @@ Ask ONE question per category that has recommendations. Skip categories with no 
 
 **Question 1: Documentation (if gaps exist)**
 
-```
-Docs improvements? Reply with letters (e.g., "a,c") or "skip".
-a) Create CLAUDE.md (Recommended) — Agent instructions with commands, conventions, structure. Critical for agents.
-b) Create .env.example — Template with [N] detected env vars. Prevents config guessing.
+```json
+{
+  "questions": [{
+    "question": "Which documentation improvements should I create? These help agents understand your project without guessing.",
+    "header": "Docs",
+    "multiSelect": true,
+    "options": [
+      {
+        "label": "Create CLAUDE.md (Recommended)",
+        "description": "Agent instruction file with commands, conventions, and project structure. Critical for agents to work effectively."
+      },
+      {
+        "label": "Create .env.example",
+        "description": "Template with [N] detected env vars. Prevents agents from guessing required configuration."
+      }
+    ]
+  }]
+}
 ```
 
 **Question 2: Tooling (if gaps exist)**
 
-```
-Tooling improvements? Reply with letters (e.g., "a,d") or "skip".
-a) Add pre-commit hooks (Recommended) — Husky + lint-staged for instant feedback (5 sec vs 10 min CI).
-b) Add linter config — [Tool] config so agents can run lint locally.
-c) Add formatter config — [Tool] config to prevent style drift across sessions.
-d) Add runtime version file — Pin [runtime] version for consistent environments.
+```json
+{
+  "questions": [{
+    "question": "Which tooling improvements should I add? These give agents instant feedback instead of waiting for CI.",
+    "header": "Tooling",
+    "multiSelect": true,
+    "options": [
+      {
+        "label": "Add pre-commit hooks (Recommended)",
+        "description": "Husky + lint-staged for instant lint/format feedback. Catches errors in 5 seconds instead of 10 minutes."
+      },
+      {
+        "label": "Add linter config",
+        "description": "[Tool] configuration for code quality checks. Agents can run lint to verify their changes."
+      },
+      {
+        "label": "Add formatter config",
+        "description": "[Tool] configuration for consistent code style. Prevents style drift across agent sessions."
+      },
+      {
+        "label": "Add runtime version file",
+        "description": "Pin [runtime] version. Ensures consistent environment across machines."
+      }
+    ]
+  }]
+}
 ```
 
 **Question 3: Testing (if gaps exist)**
 
-```
-Testing improvements? Reply with letters (e.g., "a") or "skip".
-a) Add test config (Recommended) — [Framework] config so tests can run.
-b) Add test script — Adds a `test` command agents can discover and run.
+```json
+{
+  "questions": [{
+    "question": "Which testing improvements should I add? These let agents verify their work.",
+    "header": "Testing",
+    "multiSelect": true,
+    "options": [
+      {
+        "label": "Add test config (Recommended)",
+        "description": "[Framework] configuration file. Enables test command for agents to verify changes."
+      },
+      {
+        "label": "Add test script",
+        "description": "Adds 'test' command that agents can discover and run."
+      }
+    ]
+  }]
+}
 ```
 
 **Question 4: Environment (if gaps exist)**
 
-```
-Environment improvements? Reply with letters (e.g., "a") or "skip".
-a) Add .gitignore entries (Recommended) — Ignore .env/build outputs/node_modules to avoid accidental commits.
-b) Create devcontainer (Bonus) — Reproducible VS Code environment (nice-to-have).
+```json
+{
+  "questions": [{
+    "question": "Which environment improvements should I add?",
+    "header": "Environment",
+    "multiSelect": true,
+    "options": [
+      {
+        "label": "Add .gitignore entries (Recommended)",
+        "description": "Ignore .env, build outputs, node_modules. Prevents accidental commits of sensitive data."
+      },
+      {
+        "label": "Create devcontainer (Bonus)",
+        "description": "VS Code devcontainer config for reproducible environment. Nice-to-have, not essential for agents."
+      }
+    ]
+  }]
+}
 ```
 
 ### Rules for Questions
 
-1. **Use plain text questions** — no Question tool
+1. **MUST use AskUserQuestion tool** — Never just print questions
 2. **Mark recommended items** — Add "(Recommended)" to high-impact options
 3. **Mark bonus items** — Add "(Bonus)" to nice-to-have options
 4. **Explain agent benefit** — Each description should say WHY it helps agents

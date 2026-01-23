@@ -254,7 +254,7 @@ Prime evaluates your codebase across eight pillars (48 criteria total):
 1. **Parallel Assessment** — 9 scouts run in parallel (~15-20 seconds)
 2. **Verification** — Verifies test commands actually work (e.g., `pytest --collect-only`)
 3. **Synthesize Report** — Calculates Agent Readiness score, Production Readiness score, maturity level
-4. **Interactive Remediation** — Plain-text questions (reply with letters) for agent readiness fixes only
+4. **Interactive Remediation** — Uses `AskUserQuestion` for agent readiness fixes only
 5. **Apply Fixes** — Creates/modifies files based on your selections
 6. **Re-assess** — Optionally re-run to show improvement
 
@@ -318,9 +318,9 @@ Templates adapt to your project's detected conventions and existing tools. Won't
 
 ### User Consent Required
 
-**By default, prime asks before every change** using plain-text prompts. You choose what gets created.
+**By default, prime asks before every change** using interactive checkboxes. You choose what gets created.
 
-- **Asks first** — text questions with lettered options (reply "a,c")
+- **Asks first** — uses `AskUserQuestion` tool for interactive selection per category
 - **Never overwrites** existing files without explicit consent
 - **Never commits** changes (leaves for you to review)
 - **Never deletes** files

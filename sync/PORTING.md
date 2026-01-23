@@ -23,7 +23,7 @@ Goal: keep this OpenCode port aligned with upstream with **manual, minimal edits
 ## OpenCode Invariants (do not regress)
 
 - Backend name: `opencode` only (no codex).
-- Question tool only in `/flow-next:setup`.
+- Question tool only in `/flow-next:setup`, `/flow-next:prime`, and `/flow-next:ralph-init`.
 - Reviewer uses task tool subagent `opencode-reviewer` and reuses `session_id`.
 - flowctl path: `.opencode/bin/flowctl`.
 - Ralph runner agent: `ralph-runner` configured in `.opencode/opencode.json`.
