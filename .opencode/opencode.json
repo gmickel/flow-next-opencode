@@ -3,6 +3,13 @@
   "experimental": {
     "batch_tool": true
   },
+  "provider": {
+    "openai": {
+      "options": {
+        "timeout": 600000
+      }
+    }
+  },
   "agent": {
     "ralph-runner": {
       "description": "Autonomous Ralph runner (tool-first, no chit-chat)",
