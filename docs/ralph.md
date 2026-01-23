@@ -249,6 +249,7 @@ With `BRANCH_MODE=new`, all epics work on the same run branch. Commits are prefi
 | `MAX_ATTEMPTS_PER_TASK` | `5` | Retries before auto-blocking task |
 | `MAX_REVIEW_ITERATIONS` | `3` | Fix+re-review cycles within one impl-review |
 | `WORKER_TIMEOUT` | `3600` | Seconds before killing stuck worker (1hr safety guard) |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | `600000` | Default bash tool timeout in ms (helps long reviews) |
 
 ### Scope
 
