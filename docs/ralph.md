@@ -256,6 +256,8 @@ With `BRANCH_MODE=new`, all epics work on the same run branch. Commits are prefi
 |----------|---------|-------------|
 | `EPICS` | `fn-1,fn-2` | Limit to specific epics (empty = all) |
 
+When `EPICS` is empty, Ralph treats the run as unscoped and will auto-close any open epics whose tasks are all done.
+
 ### Permissions
 
 | Variable | Default | Effect |
