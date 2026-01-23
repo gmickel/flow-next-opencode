@@ -746,6 +746,18 @@ verify_receipt() {
   local path="$1"
   local kind="$2"
   local id="$3"
+  if [[ ! -f "$path" ]]; then
+    local fallback=""
+    if [[ "$kind" == "impl_review" ]]; then
+      fallback="/tmp/impl-review-receipt.json"
+    elif [[ "$kind" == "plan_review" ]]; then
+      fallback="/tmp/plan-review-receipt.json"
+    fi
+    if [[ -n "$fallback" && -f "$fallback" ]]; then
+      mkdir -p "$(dirname "$path")" 2>/dev/null || true
+      cp "$fallback" "$path" 2>/dev/null || true
+    fi
+  fi
   [[ -f "$path" ]] || return 1
   python3 - "$path" "$kind" "$id" <<'PY'
 import json, sys
