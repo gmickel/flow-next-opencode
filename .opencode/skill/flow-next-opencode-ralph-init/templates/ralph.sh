@@ -702,10 +702,33 @@ print("1")
 PY
 }
 
+# Get list of open (non-done) epic IDs from flowctl epics --json
+list_open_epics() {
+  local tmpfile
+  tmpfile="$(mktemp)"
+  "$FLOWCTL" epics --json 2>/dev/null > "$tmpfile"
+  python3 - "$tmpfile" <<'PY'
+import sys, json
+try:
+    with open(sys.argv[1]) as f:
+        data = json.load(f)
+    for e in data.get('epics', []):
+        if e.get('status') != 'done':
+            print(e.get('id', ''))
+except: pass
+PY
+  rm -f "$tmpfile"
+}
+
 maybe_close_epics() {
-  [[ -z "$EPICS_FILE" ]] && return 0
   local epics json status all_done
-  epics="$(list_epics_from_file)"
+  if [[ -n "$EPICS_FILE" ]]; then
+    # Scoped run: use epic list from file
+    epics="$(list_epics_from_file)"
+  else
+    # Unscoped run: get all open epics from flowctl
+    epics="$(list_open_epics)"
+  fi
   [[ -z "$epics" ]] && return 0
   for epic in $epics; do
     json="$("$FLOWCTL" show "$epic" --json 2>/dev/null || true)"
@@ -740,6 +763,20 @@ if kind in ("plan_review", "impl_review"):
     if verdict not in ("SHIP", "NEEDS_WORK", "MAJOR_RETHINK"):
         sys.exit(1)
 sys.exit(0)
+PY
+}
+
+# Read verdict field from receipt file (returns empty string if not found/error)
+read_receipt_verdict() {
+  local path="$1"
+  [[ -f "$path" ]] || return 0
+  python3 - "$path" <<'PY'
+import json, sys
+try:
+    data = json.load(open(sys.argv[1], encoding="utf-8"))
+    print(data.get("verdict", ""))
+except Exception:
+    pass
 PY
 }
 
@@ -916,21 +953,31 @@ TXT
   force_retry=$worker_timeout
   plan_review_status=""
   task_status=""
+  impl_receipt_ok="1"
   if [[ "$status" == "plan" && ( "$PLAN_REVIEW" == "rp" || "$PLAN_REVIEW" == "opencode" ) ]]; then
     if ! verify_receipt "$REVIEW_RECEIPT_PATH" "plan_review" "$epic_id"; then
       echo "ralph: missing plan review receipt; forcing retry" >> "$iter_log"
       log "missing plan receipt; forcing retry"
+      # Delete corrupted/partial receipt so next attempt starts clean
+      rm -f "$REVIEW_RECEIPT_PATH" 2>/dev/null || true
       "$FLOWCTL" epic set-plan-review-status "$epic_id" --status needs_work --json >/dev/null 2>&1 || true
       force_retry=1
     fi
     epic_json="$("$FLOWCTL" show "$epic_id" --json 2>/dev/null || true)"
     plan_review_status="$(json_get plan_review_status "$epic_json")"
   fi
+  receipt_verdict=""
   if [[ "$status" == "work" && ( "$WORK_REVIEW" == "rp" || "$WORK_REVIEW" == "opencode" ) ]]; then
     if ! verify_receipt "$REVIEW_RECEIPT_PATH" "impl_review" "$task_id"; then
       echo "ralph: missing impl review receipt; forcing retry" >> "$iter_log"
       log "missing impl receipt; forcing retry"
+      impl_receipt_ok="0"
+      # Delete corrupted/partial receipt so next attempt starts clean
+      rm -f "$REVIEW_RECEIPT_PATH" 2>/dev/null || true
       force_retry=1
+    else
+      # Receipt is valid - read the verdict field
+      receipt_verdict="$(read_receipt_verdict "$REVIEW_RECEIPT_PATH")"
     fi
   fi
 
@@ -951,14 +998,51 @@ TXT
   if [[ "$status" == "work" ]]; then
     task_json="$("$FLOWCTL" show "$task_id" --json 2>/dev/null || true)"
     task_status="$(json_get status "$task_json")"
-    if [[ "$task_status" != "done" ]]; then
+    if [[ "$task_status" == "done" ]]; then
+      if [[ "$impl_receipt_ok" == "0" ]]; then
+        # Task marked done but receipt missing/invalid - can't trust done status
+        # Reset to todo so flowctl next picks it up again (prevents task jumping)
+        echo "ralph: task done but receipt missing; resetting to todo" >> "$iter_log"
+        log "task $task_id: resetting done→todo (receipt missing)"
+        if "$FLOWCTL" task reset "$task_id" --json >/dev/null 2>&1; then
+          task_status="todo"
+        else
+          # Fatal: if reset fails, we'd silently skip this task forever (task jumping)
+          echo "ralph: FATAL: failed to reset task $task_id; aborting to prevent task jumping" >> "$iter_log"
+          ui_fail "Failed to reset $task_id after missing receipt; aborting to prevent task jumping"
+          write_completion_marker "FAILED"
+          exit 1
+        fi
+        force_retry=1
+      else
+        # Receipt is structurally valid - now check the verdict
+        if [[ "$receipt_verdict" == "NEEDS_WORK" ]]; then
+          # Task marked done but review said NEEDS_WORK - must retry
+          echo "ralph: receipt verdict is NEEDS_WORK; resetting task to todo" >> "$iter_log"
+          log "task $task_id: receipt verdict=NEEDS_WORK despite done status; resetting"
+          if "$FLOWCTL" task reset "$task_id" --json >/dev/null 2>&1; then
+            task_status="todo"
+          else
+            echo "ralph: FATAL: failed to reset task $task_id; aborting" >> "$iter_log"
+            ui_fail "Failed to reset $task_id after NEEDS_WORK verdict; aborting"
+            write_completion_marker "FAILED"
+            exit 1
+          fi
+          verdict="NEEDS_WORK"
+          force_retry=1
+        else
+          ui_task_done "$task_id"
+          # Use receipt verdict if available, otherwise derive from task completion
+          [[ -n "$receipt_verdict" ]] && verdict="$receipt_verdict"
+          [[ -z "$verdict" ]] && verdict="SHIP"
+          # If we timed out but can prove completion (done + receipt valid + verdict OK), don't retry
+          force_retry=0
+        fi
+      fi
+    else
       echo "ralph: task not done; forcing retry" >> "$iter_log"
       log "task $task_id status=$task_status; forcing retry"
       force_retry=1
-    else
-      ui_task_done "$task_id"
-      # Derive verdict from task completion for logging
-      [[ -z "$verdict" ]] && verdict="SHIP"
     fi
   fi
   append_progress "$verdict" "$promise" "$plan_review_status" "$task_status"
@@ -990,21 +1074,28 @@ TXT
   fi
 
   if [[ "$exit_code" -eq 2 && "$status" == "work" ]]; then
-    attempts="$(bump_attempts "$ATTEMPTS_FILE" "$task_id")"
-    log "retry task=$task_id attempts=$attempts"
-    ui_retry "$task_id" "$attempts" "$MAX_ATTEMPTS_PER_TASK"
-    if (( attempts >= MAX_ATTEMPTS_PER_TASK )); then
-      reason_file="$RUN_DIR/block-${task_id}.md"
-      {
-        echo "Auto-blocked after ${attempts} attempts."
-        echo "Run: $RUN_ID"
-        echo "Task: $task_id"
-        echo ""
-        echo "Last output:"
-        tail -n 40 "$iter_log" || true
-      } > "$reason_file"
-      "$FLOWCTL" block "$task_id" --reason-file "$reason_file" --json || true
-      ui_blocked "$task_id"
+    if [[ "$worker_timeout" -eq 0 ]]; then
+      # Real failure - count against attempts budget
+      attempts="$(bump_attempts "$ATTEMPTS_FILE" "$task_id")"
+      log "retry task=$task_id attempts=$attempts"
+      ui_retry "$task_id" "$attempts" "$MAX_ATTEMPTS_PER_TASK"
+      if (( attempts >= MAX_ATTEMPTS_PER_TASK )); then
+        reason_file="$RUN_DIR/block-${task_id}.md"
+        {
+          echo "Auto-blocked after ${attempts} attempts."
+          echo "Run: $RUN_ID"
+          echo "Task: $task_id"
+          echo ""
+          echo "Last output:"
+          tail -n 40 "$iter_log" || true
+        } > "$reason_file"
+        "$FLOWCTL" block "$task_id" --reason-file "$reason_file" --json || true
+        ui_blocked "$task_id"
+      fi
+    else
+      # Timeout is infrastructure issue, not code failure - don't count against attempts
+      log "timeout retry task=$task_id (not counting against attempts)"
+      ui "   ${C_YELLOW}↻ Timeout retry${C_RESET} ${C_DIM}(not counted)${C_RESET}"
     fi
   fi
 
