@@ -10,7 +10,6 @@
   - `./install.sh --project "$PWD"` # refresh .opencode
   - `mkdir -p scripts/ralph/runs`
   - `cp -R .opencode/skill/flow-next-opencode-ralph-init/templates/. scripts/ralph/`
-  - `cp .opencode/skill/flow-next-opencode-ralph-init/templates/.gitignore scripts/ralph/`
   - `cp .opencode/bin/flowctl .opencode/bin/flowctl.py scripts/ralph/`
   - `chmod +x scripts/ralph/ralph.sh scripts/ralph/ralph_once.sh scripts/ralph/flowctl`
   - `sed -i '' -e 's/{{PLAN_REVIEW}}/opencode/' -e 's/{{WORK_REVIEW}}/opencode/' scripts/ralph/config.env`
