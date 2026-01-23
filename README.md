@@ -2,7 +2,7 @@
 
 # Flow-Next (OpenCode)
 
-[![Version](https://img.shields.io/badge/Version-0.2.0-green)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-0.2.6-green)](./CHANGELOG.md)
 [![Status](https://img.shields.io/badge/Status-Experimental-orange)](./CHANGELOG.md)
 
 **Plan first, work second. OpenCode-native port of Flow-Next.**
@@ -189,6 +189,156 @@ You can always run interview again after planning to catch anything missed. Inte
 
 ---
 
+## Agent Readiness Assessment
+
+> Inspired by [Factory.ai's Agent Readiness framework](https://factory.ai/news/agent-readiness)
+
+`/flow-next:prime` assesses your codebase for agent-readiness and proposes improvements. Works for greenfield and brownfield projects.
+
+### The Problem
+
+Agents waste cycles when codebases lack:
+- **Pre-commit hooks** → waits 10min for CI instead of 5sec local feedback
+- **Documented env vars** → guesses, fails, guesses again
+- **CLAUDE.md** → doesn't know project conventions
+- **Test commands** → can't verify changes work
+
+These are **environment problems**, not agent problems. Prime helps fix them.
+
+### Quick Start
+
+```bash
+/flow-next:prime                 # Full assessment + interactive fixes
+/flow-next:prime --report-only   # Just show the report
+/flow-next:prime --fix-all       # Apply all fixes without asking
+```
+
+### The Eight Pillars
+
+Prime evaluates your codebase across eight pillars (48 criteria total):
+
+#### Agent Readiness (Pillars 1-5) — Scored, Fixes Offered
+
+| Pillar | What It Checks |
+|--------|----------------|
+| **1. Style & Validation** | Linters, formatters, type checking, pre-commit hooks |
+| **2. Build System** | Build tool, commands, lock files, monorepo tooling |
+| **3. Testing** | Test framework, commands, verification, coverage, E2E |
+| **4. Documentation** | README, CLAUDE.md, setup docs, architecture |
+| **5. Dev Environment** | .env.example, Docker, devcontainer, runtime version |
+
+#### Production Readiness (Pillars 6-8) — Reported Only
+
+| Pillar | What It Checks |
+|--------|----------------|
+| **6. Observability** | Structured logging, tracing, metrics, error tracking, health endpoints |
+| **7. Security** | Branch protection, secret scanning, CODEOWNERS, Dependabot |
+| **8. Workflow & Process** | CI/CD, PR templates, issue templates, release automation |
+
+**Two-tier approach**: Pillars 1-5 determine your agent maturity level and are eligible for fixes. Pillars 6-8 are reported for visibility but no fixes are offered — these are team/production decisions.
+
+### Maturity Levels
+
+| Level | Name | Description | Overall Score |
+|-------|------|-------------|---------------|
+| 1 | Minimal | Basic project structure only | <30% |
+| 2 | Functional | Can build and run, limited docs | 30-49% |
+| 3 | **Standardized** | Agent-ready for routine work | 50-69% |
+| 4 | Optimized | Fast feedback loops, comprehensive docs | 70-84% |
+| 5 | Autonomous | Full autonomous operation capable | 85%+ |
+
+**Level 3 is the target** for most teams. It means agents can handle routine work: bug fixes, tests, docs, dependency updates.
+
+### How It Works
+
+1. **Parallel Assessment** — 9 scouts run in parallel (~15-20 seconds)
+2. **Verification** — Verifies test commands actually work (e.g., `pytest --collect-only`)
+3. **Synthesize Report** — Calculates Agent Readiness score, Production Readiness score, maturity level
+4. **Interactive Remediation** — Plain-text questions (reply with letters) for agent readiness fixes only
+5. **Apply Fixes** — Creates/modifies files based on your selections
+6. **Re-assess** — Optionally re-run to show improvement
+
+### Example Report
+
+```markdown
+# Agent Readiness Report
+
+**Repository**: my-project
+**Assessed**: 2026-01-23
+
+## Scores Summary
+
+| Category | Score | Level |
+|----------|-------|-------|
+| **Agent Readiness** (Pillars 1-5) | 73% | Level 4 - Optimized |
+| Production Readiness (Pillars 6-8) | 17% | — |
+| **Overall** | 52% | — |
+
+## Agent Readiness (Pillars 1-5)
+
+| Pillar | Score | Status |
+|--------|-------|--------|
+| Style & Validation | 67% (4/6) | ⚠️ |
+| Build System | 100% (6/6) | ✅ |
+| Testing | 67% (4/6) | ⚠️ |
+| Documentation | 83% (5/6) | ✅ |
+| Dev Environment | 83% (5/6) | ✅ |
+
+## Production Readiness (Pillars 6-8) — Report Only
+
+| Pillar | Score | Status |
+|--------|-------|--------|
+| Observability | 33% (2/6) | ❌ |
+| Security | 17% (1/6) | ❌ |
+| Workflow & Process | 0% (0/6) | ❌ |
+
+## Top Recommendations (Agent Readiness)
+
+1. **Tooling**: Add pre-commit hooks — 5 sec feedback vs 10 min CI wait
+2. **Tooling**: Add Python type checking — catch errors locally
+3. **Docs**: Update README — replace generic template
+```
+
+### Remediation Templates
+
+Prime offers fixes for agent readiness gaps (**not** team governance):
+
+| Fix | What Gets Created |
+|-----|-------------------|
+| CLAUDE.md | Project overview, commands, structure, conventions |
+| .env.example | Template with detected env vars |
+| Pre-commit (JS) | Husky + lint-staged config |
+| Pre-commit (Python) | `.pre-commit-config.yaml` |
+| Linter config | ESLint, Biome, or Ruff config (if none exists) |
+| Formatter config | Prettier or Biome config (if none exists) |
+| .nvmrc/.python-version | Runtime version pinning |
+| .gitignore entries | .env, build outputs, node_modules |
+
+Templates adapt to your project's detected conventions and existing tools. Won't suggest ESLint if you have Biome, etc.
+
+### User Consent Required
+
+**By default, prime asks before every change** using plain-text prompts. You choose what gets created.
+
+- **Asks first** — text questions with lettered options (reply "a,c")
+- **Never overwrites** existing files without explicit consent
+- **Never commits** changes (leaves for you to review)
+- **Never deletes** files
+- **Merges** with existing configs when possible
+- **Respects** your existing tools (won't add ESLint if you have Biome)
+
+Use `--fix-all` to skip questions and apply everything. Use `--report-only` to just see the assessment.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--report-only` | Skip remediation, just show report |
+| `--fix-all` | Apply all recommendations without asking |
+| `<path>` | Assess a different directory |
+
+---
+
 ## Human-in-the-Loop Workflow (Detailed)
 
 ```mermaid
@@ -232,6 +382,7 @@ flowchart TD
 | `/flow-next:work <id|file>` | Execute epic, task, or spec file, re-anchoring before each |
 | `/flow-next:interview <id>` | Deep interview to flesh out a spec before planning |
 | `/flow-next:plan-review <id>` | Carmack-level plan review via OpenCode or RepoPrompt |
+| `/flow-next:prime` | Assess codebase agent-readiness, propose fixes |
 | `/flow-next:impl-review` | Carmack-level impl review of current branch |
 | `/flow-next:sync <id>` | Manually sync downstream specs after implementation drift |
 | `/flow-next:ralph-init` | Scaffold repo-local Ralph harness ( `scripts/ralph/` ) |
@@ -246,6 +397,9 @@ Work accepts an epic ( `fn-N` ), task ( `fn-N.M` ), or markdown spec file ( `.md
 ```bash
 /flow-next:plan Add caching --research=grep --no-review
 /flow-next:plan Add auth --research=rp --review=rp
+
+/flow-next:prime --report-only
+/flow-next:prime --fix-all
 
 /flow-next:work fn-1 --branch=current --no-review
 /flow-next:work fn-1 --branch=new --review=opencode
@@ -267,6 +421,7 @@ Natural language also works:
 | `/flow-next:work` | `--branch=current|new|worktree` , `--review=opencode|rp|export|none` , `--no-review` |
 | `/flow-next:plan-review` | `--review=opencode|rp|export` |
 | `/flow-next:impl-review` | `--review=opencode|rp|export` |
+| `/flow-next:prime` | `--report-only`, `--fix-all` |
 
 ---
 
@@ -405,7 +560,7 @@ Change those if you want a different model or effort.
 
 [RepoPrompt](https://repoprompt.com/?atp=KJbuL4) provides the best review experience on macOS.
 
-**Requires RepoPrompt 1.6.0+** for the rp review backend (builder review mode).
+**Requires RepoPrompt 1.6.0+** for the rp review backend (builder review mode). Older versions will fail — upgrade if using rp.
 
 **Why use RepoPrompt:**
 * Best-in-class context builder for reviews (full file context, smart selection)

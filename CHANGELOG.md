@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+**Restores parity with upstream Claude Code plugin (flow-next 0.18.0 + 0.18.4).**
+
+### Ported from upstream 0.18.0 → 0.18.4
+
+- **/flow-next:prime** — Agent readiness assessment (8 pillars, report + optional fixes)
+- **Prime scouts** — tooling/claude-md/env/testing/build/observability/security/workflow
+- **Prime remediation templates** — CLAUDE.md, .env.example, pre-commit, lint/format, runtime pins, .gitignore, test configs
+- **Ralph receipt enforcement** — Missing/invalid review receipts reset tasks and retry
+- **Ralph timeouts** — Timeouts no longer count against attempt limits
+- **Ralph unscoped runs** — Auto-close open epics when scope not specified
+- **Docs** — Clarify RepoPrompt 1.6.0+ requirement for rp review backend
+
 **Restores parity with upstream Claude Code plugin (flow-next 0.17.0 + 0.17.1).**
 
 ### Ported from upstream 0.17.0 → 0.17.1
