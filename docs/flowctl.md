@@ -483,21 +483,38 @@ Output (stdout or file):
 
 ### rp
 
-RepoPrompt wrappers (preferred for reviews):
+RepoPrompt wrappers (preferred for reviews).
 
 Requires RepoPrompt 1.6.0+ for `--response-type review`.
 
+**Primary entry point** (recommended; picks window + creates builder tab):
+
 ```bash
-flowctl rp pick-window --repo-root "$REPO_ROOT"
-flowctl rp ensure-workspace --window "$W" --repo-root "$REPO_ROOT"
-flowctl rp builder --window "$W" --summary "Review a plan to ..."
-flowctl rp builder --window "$W" --summary "Review implementation..." --response-type review
-flowctl rp setup-review --repo-root "$REPO_ROOT" --summary "Review implementation..." --response-type review --json
+eval "$(flowctl rp setup-review --repo-root "$REPO_ROOT" --summary "Review implementation..." --response-type review)"
+# Returns: W=<window> T=<tab> CHAT_ID=<id>
+
+# If rp-cli supports --create, it will auto-open a window when none matches:
+eval "$(flowctl rp setup-review --repo-root "$REPO_ROOT" --summary "..." --response-type review --create)"
+```
+
+**Post-setup commands** (use $W/$T from setup-review):
+
+```bash
 flowctl rp prompt-get --window "$W" --tab "$T"
 flowctl rp prompt-set --window "$W" --tab "$T" --message-file /tmp/review-prompt.md
 flowctl rp select-add --window "$W" --tab "$T" path/to/file
 flowctl rp chat-send --window "$W" --tab "$T" --message-file /tmp/review-prompt.md --chat-id "$CHAT_ID" --mode review
 flowctl rp prompt-export --window "$W" --tab "$T" --out /tmp/export.md
+```
+
+**Low-level commands** (prefer setup-review instead):
+
+```bash
+flowctl rp windows [--json]
+flowctl rp pick-window --repo-root "$REPO_ROOT"
+flowctl rp ensure-workspace --window "$W" --repo-root "$REPO_ROOT"
+flowctl rp builder --window "$W" --summary "Review a plan to ..."
+flowctl rp builder --window "$W" --summary "Review implementation..." --response-type review
 ```
 
 ### opencode
@@ -611,7 +628,7 @@ flowctl checkpoint restore --epic fn-1 [--json]
 flowctl checkpoint delete --epic fn-1 [--json]
 ```
 
-Checkpoints preserve full epic + task state (including runtime state). Useful when compaction occurs during plan-review cycles.
+Checkpoints preserve full epic + task state. Useful when compaction occurs during plan-review cycles.
 
 ### status
 
@@ -639,23 +656,37 @@ flowctl state-path --task fn-1.2 [--json]
 
 Example output:
 ```json
-{"success": true, "state_dir": "/repo/.git/flow-state", "task_state_path": "/repo/.git/flow-state/tasks/fn-1.2.state.json"}
+{"success": true, "state_dir": "/repo/.git/flow-state", "source": "git-common-dir", "task_state_path": "/repo/.git/flow-state/tasks/fn-1.2.state.json"}
 ```
+
+Source values:
+- `env` — `FLOW_STATE_DIR` environment variable
+- `git-common-dir` — `git --git-common-dir` (shared across worktrees)
+- `fallback` — `.flow/state` (non-git or old git)
+
+`task_state_path` is included only when `--task` is provided.
 
 ### migrate-state
 
-Migrate runtime state from tracked task definitions into the shared state directory.
+Migrate existing repos to the shared runtime state model.
 
 ```bash
 flowctl migrate-state [--clean] [--json]
 ```
 
+Options:
+- `--clean` — Remove runtime fields from tracked JSON files after migration (recommended for cleaner git diffs)
+
 What it does:
 1. Scans `.flow/tasks/*.json` for runtime fields
 2. Writes runtime state to `.git/flow-state/tasks/*.state.json`
-3. Optional `--clean` removes runtime fields from tracked task JSONs
+3. With `--clean`: removes runtime fields from the original JSON files
 
-Backward compatible: repos work without migration. Use `--clean` only if you want a clean diff.
+**When to use:**
+- After upgrading to 0.17.0+ if you want parallel worktree support
+- To clean up git diffs (runtime changes no longer tracked)
+
+**Not required** for normal operation — the merged read path handles backward compatibility automatically.
 
 ## Ralph Receipts
 

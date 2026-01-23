@@ -4,6 +4,23 @@ Ralph is Flow-Next's repo-local autonomous harness. It loops over tasks, applies
 
 ---
 
+## Table of Contents
+
+- [Quick Start](#quick-start) — Setup, configure, run
+- [How It Works](#how-it-works) — Loop architecture
+- [Why Ralph vs ralph-wiggum](#why-flow-next-ralph-vs-anthropics-ralph-wiggum)
+- [Quality Gates](#quality-gates) — Reviews, receipts, memory
+- [Configuration](#configuration) — All config.env options
+- [Run Artifacts](#run-artifacts) — Logs, receipts, blocks
+- [RepoPrompt Integration](#repoprompt-integration)
+- [OpenCode Integration](#opencode-integration)
+- [Troubleshooting](#troubleshooting)
+- [Testing Ralph](#testing-ralph) — Single iteration, sandbox, watch mode
+- [Guard Hooks](#guard-hooks) — Workflow enforcement
+- [Morning Review Workflow](#morning-review-workflow) — What to check after overnight runs
+
+---
+
 ## Quick Start
 
 ### Step 1: Setup (inside OpenCode)
@@ -374,6 +391,16 @@ scripts/ralph/ralph_once.sh
 ```
 
 Runs one loop iteration, then exits. Good for verifying setup.
+
+### Deterministic smoke fixture (clean repo)
+
+```bash
+scripts/ralph-smoke.sh --dir /tmp/flow-next-opencode-smoke.X
+cd /tmp/flow-next-opencode-smoke.X
+./scripts/ralph/ralph_once.sh --watch
+```
+
+Creates a clean test repo with a tiny, reviewable diff and a single task.
 
 ### Sandbox mode (recommended for unattended runs)
 

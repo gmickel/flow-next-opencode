@@ -19,6 +19,48 @@ Ralph docs: `docs/ralph.md`
 
 ---
 
+🌐 **Prefer a visual overview?** See the [Flow-Next app page](https://mickel.tech/apps/flow-next) for diagrams and examples.
+
+---
+
+> ### ⚠️ RepoPrompt 1.6.0+ Required
+>
+> If you use the **RepoPrompt (rp) backend** for `/flow-next:impl-review`, upgrade to **RepoPrompt 1.6.0+**.
+>
+> Check your version: `rp-cli --version`
+>
+> The new builder review mode provides better context discovery and more focused reviews. If you can't upgrade yet, use `--review=opencode` or `--review=none` as alternatives.
+
+---
+
+## Table of Contents
+
+- [What Is This?](#what-is-this)
+- [Epic-first Task Model](#epic-first-task-model)
+- [Why It Works](#why-it-works)
+- [Quick Start](#quick-start) — Install, setup, use
+- [When to Use What](#when-to-use-what) — Interview vs Plan vs Work
+- [Agent Readiness Assessment](#agent-readiness-assessment) — `/flow-next:prime`
+- [Human-in-the-Loop Workflow (Detailed)](#human-in-the-loop-workflow-detailed)
+- [Commands](#commands) — All slash commands + flags
+  - [Command Reference](#command-reference)
+- [The Workflow](#the-workflow) — Planning and work phases
+- [Ralph Mode (Autonomous, Opt-In)](#ralph-mode-autonomous-opt-in)
+- [Features](#features) — Re-anchoring, multi-user, reviews, dependencies
+- [Memory System (Opt-in)](#memory-system-opt-in)
+- [Ralph (Autonomous Mode)](#ralph-autonomous-mode)
+- [Task Completion](#task-completion)
+- [.flow/ Directory](#flow-directory) — File structure
+- [flowctl CLI](#flowctl-cli) — Direct CLI usage
+- [Troubleshooting](#troubleshooting)
+- [Flow vs Flow-Next](#flow-vs-flow-next)
+- [Requirements](#requirements)
+- [Development](#development)
+- [Other Platforms](#other-platforms)
+- [Uninstall](#uninstall)
+
+---
+
 ## What Is This?
 
 Flow-Next is a plan-first orchestration system: epics, dependency-ordered tasks, re-anchoring, reviews, and audit trails. Everything lives in your repo. No external services. Uninstall by deleting `.flow/` (and `scripts/ralph/` if enabled).
@@ -186,6 +228,23 @@ Best for: bug fixes, small features, well-scoped changes that don’t need task 
 | Small single-task, spec complete | Work directly (creates 1 epic + 1 task) |
 
 You can always run interview again after planning to catch anything missed. Interview writes back to the spec, so iterations refine rather than replace.
+
+---
+
+### Interactive vs Autonomous (The Handoff)
+
+After planning completes, choose how to execute:
+
+| Mode | Command | When to Use |
+|------|---------|-------------|
+| **Interactive** | `/flow-next:work fn-1` | Complex tasks, learning a codebase, taste matters, want to intervene |
+| **Autonomous (Ralph)** | `scripts/ralph/ralph.sh` | Clear specs, bulk implementation, overnight runs |
+
+**Heuristic:** If you can write checkboxes, you can Ralph it. If you can’t, you’re not ready to loop—you're ready to think.
+
+For full autonomous mode, prepare 5–10 plans before starting Ralph. See [Ralph Mode](#ralph-autonomous-mode) for setup.
+
+> 📖 Deep dive: [Ralph Mode: Why AI Agents Should Forget](https://medium.com/byte-sized-brainwaves/ralph-mode-why-ai-agents-should-forget-9f98bec6fc91)
 
 ---
 
@@ -422,6 +481,220 @@ Natural language also works:
 | `/flow-next:plan-review` | `--review=opencode|rp|export` |
 | `/flow-next:impl-review` | `--review=opencode|rp|export` |
 | `/flow-next:prime` | `--report-only`, `--fix-all` |
+
+---
+
+### Command Reference
+
+Detailed input documentation for each command.
+
+#### `/flow-next:plan`
+
+```
+/flow-next:plan <idea or fn-N> [--research=rp|grep] [--review=opencode|rp|export|none]
+```
+
+| Input | Description |
+|-------|-------------|
+| `<idea>` | Free-form feature description ("Add user authentication with OAuth") |
+| `fn-N` | Existing epic ID to update the plan |
+| `--research=rp` | Use RepoPrompt context-scout for deeper codebase discovery |
+| `--research=grep` | Use grep-based repo-scout (default, faster) |
+| `--review=opencode\|rp\|export\|none` | Review backend after planning |
+| `--no-review` | Shorthand for `--review=none` |
+
+#### `/flow-next:work`
+
+```
+/flow-next:work <id|file> [--branch=current|new|worktree] [--review=opencode|rp|export|none]
+```
+
+| Input | Description |
+|-------|-------------|
+| `fn-N` | Execute entire epic (all tasks in dependency order) |
+| `fn-N.M` | Execute single task |
+| `path/to/spec.md` | Create epic from spec file, execute immediately |
+| `--branch=current` | Work on current branch |
+| `--branch=new` | Create new branch `fn-N-slug` (default) |
+| `--branch=worktree` | Create git worktree for isolated work |
+| `--review=opencode\|rp\|export\|none` | Review backend after work |
+| `--no-review` | Shorthand for `--review=none` |
+
+#### `/flow-next:interview`
+
+```
+/flow-next:interview <id|file>
+```
+
+| Input | Description |
+|-------|-------------|
+| `fn-N` | Interview about epic to refine requirements |
+| `fn-N.M` | Interview about specific task |
+| `path/to/spec.md` | Interview about spec file |
+| `"rough idea"` | Interview about a new idea (creates epic) |
+
+Deep questioning (40+ questions) to surface requirements, edge cases, and decisions.
+
+#### `/flow-next:plan-review`
+
+```
+/flow-next:plan-review <fn-N> [--review=opencode|rp|export] [focus areas]
+```
+
+| Input | Description |
+|-------|-------------|
+| `fn-N` | Epic ID to review |
+| `--review=opencode` | Use OpenCode (cross-platform) |
+| `--review=rp` | Use RepoPrompt (macOS, visual builder) |
+| `--review=export` | Export context for manual review |
+| `[focus areas]` | Optional: "focus on security" or "check API design" |
+
+Carmack-level criteria: Completeness, Feasibility, Clarity, Architecture, Risks, Scope, Testability.
+
+#### `/flow-next:impl-review`
+
+```
+/flow-next:impl-review [--review=opencode|rp|export] [focus areas]
+```
+
+| Input | Description |
+|-------|-------------|
+| `--review=opencode` | Use OpenCode (cross-platform) |
+| `--review=rp` | Use RepoPrompt (macOS, visual builder) |
+| `--review=export` | Export context for manual review |
+| `[focus areas]` | Optional: "focus on performance" or "check error handling" |
+
+Reviews current branch changes. Carmack-level criteria: Correctness, Simplicity, DRY, Architecture, Edge Cases, Tests, Security.
+
+#### `/flow-next:prime`
+
+```
+/flow-next:prime [--report-only] [--fix-all] [path]
+```
+
+| Input | Description |
+|-------|-------------|
+| (no args) | Assess current directory, interactive fixes |
+| `--report-only` | Show assessment report, skip remediation |
+| `--fix-all` | Apply all recommendations without asking |
+| `[path]` | Assess a different directory |
+
+See [Agent Readiness Assessment](#agent-readiness-assessment) for details.
+
+#### `/flow-next:sync`
+
+```
+/flow-next:sync <id> [--dry-run]
+```
+
+| Input | Description |
+|-------|-------------|
+| `fn-N` | Sync entire epic's downstream tasks |
+| `fn-N.M` | Sync from specific task |
+| `--dry-run` | Preview changes without writing |
+
+Updates downstream task specs when implementation drifts from plan.
+
+#### `/flow-next:ralph-init`
+
+```
+/flow-next:ralph-init
+```
+
+No arguments. Scaffolds `scripts/ralph/` for autonomous operation.
+
+#### `/flow-next:setup`
+
+```
+/flow-next:setup
+```
+
+No arguments. Optional setup that:
+- Configures review backend (rp, opencode, or none)
+- Copies flowctl to `.flow/bin/`
+- Adds flow-next instructions to `AGENTS.md`
+
+#### `/flow-next:uninstall`
+
+```
+/flow-next:uninstall
+```
+
+No arguments. Interactive removal with option to keep tasks.
+
+---
+
+## The Workflow
+
+### Defaults (manual and Ralph)
+
+Flow-Next uses the same defaults in manual and Ralph runs. Ralph bypasses prompts only.
+
+- plan: `--research=grep`
+- work: `--branch=new`
+- review: from `.flow/config.json` (set via `/flow-next:setup`), or `none` if not configured
+
+Override via flags or `scripts/ralph/config.env`.
+
+### Planning Phase
+
+1. **Research (parallel subagents)**: `repo-scout` (or `context-scout` if rp-cli) + `practice-scout` + `docs-scout` + `github-scout` + `epic-scout` + `docs-gap-scout`
+2. **Gap analysis**: `flow-gap-analyst` finds edge cases + missing requirements
+3. **Epic creation**: Writes spec to `.flow/specs/fn-N.md`, sets epic dependencies from `epic-scout` findings
+4. **Task breakdown**: Creates tasks + explicit dependencies in `.flow/tasks/`, adds doc update acceptance criteria from `docs-gap-scout`
+5. **Validate**: `flowctl validate --epic fn-N`
+6. **Review** (optional): `/flow-next:plan-review fn-N` with re-anchor + fix loop until "Ship"
+
+### Work Phase
+
+1. **Re-anchor**: Re-read epic + task specs + git state (EVERY task)
+2. **Execute**: Implement using existing patterns
+3. **Test**: Verify acceptance criteria
+4. **Record**: `flowctl done` adds summary + evidence to the task spec
+5. **Review** (optional): `/flow-next:impl-review` via OpenCode or RepoPrompt
+6. **Loop**: Next ready task → repeat until no ready tasks. Close epic manually (`flowctl epic close fn-N`) or let Ralph close at loop end.
+
+---
+
+## Ralph Mode (Autonomous, Opt-In)
+
+Ralph is repo-local and opt-in. Files are created only by `/flow-next:ralph-init`. Remove with `rm -rf scripts/ralph/`.
+`/flow-next:ralph-init` also writes `scripts/ralph/.gitignore` so run logs stay out of git.
+
+What it automates (one unit per iteration, fresh context each time):
+- Selector chooses plan vs work unit (`flowctl next`)
+- Plan gate = plan review loop until Ship (if enabled)
+- Work gate = one task until pass (tests + validate + optional impl review)
+- Single run branch: all epics work on one `ralph-<run-id>` branch (cherry-pick/revert friendly)
+
+Enable:
+```bash
+/flow-next:ralph-init
+./scripts/ralph/ralph_once.sh   # one iteration (observe)
+./scripts/ralph/ralph.sh        # full loop (AFK)
+```
+
+**Watch mode** - see what OpenCode is doing:
+```bash
+./scripts/ralph/ralph.sh --watch           # Stream tool calls in real-time
+./scripts/ralph/ralph.sh --watch verbose   # Also stream model responses
+```
+
+Run scripts from terminal (not inside OpenCode). `ralph_once.sh` runs one iteration so you can observe before going fully autonomous.
+
+### Ralph defaults vs recommended (plan review gate)
+
+`REQUIRE_PLAN_REVIEW` controls whether Ralph must pass the **plan review gate** before doing any implementation work.
+
+**Default (safe, won't stall):**
+
+* `REQUIRE_PLAN_REVIEW=0`
+  Ralph can proceed to work tasks even if `rp-cli` is missing or unavailable overnight.
+
+**Recommended (strict, slows down):**
+
+* `REQUIRE_PLAN_REVIEW=1`
+  Ralph won't start any task work until the plan review passes.
 
 ---
 
@@ -762,16 +1035,86 @@ flowctl config set review.backend opencode  # Set default backend
 ### Reset a stuck task
 
 ```bash
-flowctl show fn-1.2 --json | jq '.status'
-flowctl task set fn-1.2 --status pending
+# Check task status
+flowctl show fn-1.2 --json
+
+# Reset to todo (from done/blocked)
+flowctl task reset fn-1.2
+
+# Reset + dependents in same epic
+flowctl task reset fn-1.2 --cascade
 ```
 
-### Clean up `.flow/`
+### Clean up `.flow/` safely
 
 ```bash
+# Remove all flow state (keeps git history)
 rm -rf .flow/
+
+# Re-initialize
 flowctl init
 ```
+
+### Debug Ralph runs
+
+```bash
+# Check run progress
+cat scripts/ralph/runs/*/progress.txt
+
+# View iteration logs
+ls scripts/ralph/runs/*/iter-*.log
+
+# Check for blocked tasks
+ls scripts/ralph/runs/*/block-*.md
+```
+
+### Receipt validation failing
+
+```bash
+# Check receipt exists
+ls scripts/ralph/runs/*/receipts/
+
+# Verify receipt format
+cat scripts/ralph/runs/*/receipts/impl-fn-1.1.json
+# Must have: {"type":"impl_review","id":"fn-1.1",...}
+```
+
+### Custom rp-cli instructions conflicting
+
+> **Caution**: If you have custom instructions for `rp-cli` in your `AGENTS.md`, they may conflict with Flow-Next's RepoPrompt integration.
+
+Flow-Next's plan-review and impl-review skills include specific instructions for `rp-cli` usage (window selection, builder workflow, chat commands). Custom rp-cli instructions can override these and cause unexpected behavior.
+
+**Symptoms:**
+- Reviews not using the correct RepoPrompt window
+- Builder not selecting expected files
+- Chat commands failing or behaving differently
+
+**Fix:** Remove or comment out custom rp-cli instructions from `AGENTS.md` when using Flow-Next reviews. The plugin provides complete rp-cli guidance.
+
+---
+
+## Flow vs Flow-Next
+
+| | Flow | Flow-Next |
+|:--|:--|:--|
+| **Task tracking** | External tracker or standalone plan files | `.flow/` directory (bundled flowctl) |
+| **Install** | Plugin + optional external tracker | Project-local install (`./install.sh`) |
+| **Artifacts** | Standalone plan files | `.flow/specs/` and `.flow/tasks/` |
+| **Config edits** | External config edits (if using tracker) | None |
+| **Multi-user** | Via external tracker | Built-in (scan-based IDs, soft claims) |
+| **Uninstall** | Remove plugin + external tracker config | Delete `.flow/` (and `scripts/ralph/` if enabled) |
+
+**Choose Flow-Next if you want:**
+- Zero external dependencies
+- No config file edits
+- Clean uninstall (delete `.flow/`, and `scripts/ralph/` if enabled)
+- Built-in multi-user safety
+
+**Choose Flow if you:**
+- Already use an external tracker for issue tracking
+- Want plan files as standalone artifacts
+- Need full issue management features
 
 ---
 
@@ -779,7 +1122,39 @@ flowctl init
 
 * Python 3.8+
 * git
+* OpenCode CLI (for reviews + Ralph)
 * Optional: [RepoPrompt](https://repoprompt.com/?atp=KJbuL4) for macOS GUI reviews + its context builder (also powers the planning context-scout). OpenCode reviews work without it.
+
+---
+
+## Development
+
+```bash
+# Install into a scratch project
+./install.sh --project /tmp/flow-next-dev
+
+# Open that project in OpenCode and run:
+/flow-next:setup
+```
+
+Use `scripts/ralph-smoke.sh` for deterministic end-to-end tests.
+
+---
+
+## Other Platforms
+
+### Claude Code (Upstream)
+
+The canonical plugin lives in the Claude Code marketplace:
+https://github.com/gmickel/gmickel-claude-marketplace/tree/main/plugins/flow-next
+
+### OpenAI Codex (Experimental)
+
+Codex-specific setup lives in the upstream repo. This OpenCode port does not target Codex directly.
+
+### Community Ports and Inspired Projects
+
+If you’ve built a port, open a PR to add it here.
 
 ---
 
