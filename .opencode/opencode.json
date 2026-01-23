@@ -1,7 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "experimental": {
-    "batch_tool": true
+    "batch_tool": true,
+    "mcp_timeout": 600000
   },
   "provider": {
     "openai": {
