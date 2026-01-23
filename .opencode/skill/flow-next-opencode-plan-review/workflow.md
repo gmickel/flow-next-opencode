@@ -70,6 +70,7 @@ Include:
 Use the `flowctl opencode plan-review` command:
 
 ```bash
+# Use bash tool timeout: 600000 (10 minutes) for review commands
 $FLOWCTL opencode plan-review "$EPIC_ID" --receipt "$RECEIPT_PATH"
 # Output includes VERDICT=SHIP|NEEDS_WORK|MAJOR_RETHINK
 ```
@@ -104,7 +105,7 @@ EOF
 If `VERDICT=NEEDS_WORK`:
 1. Parse issues from output
 2. Fix plan via `$FLOWCTL epic set-plan`
-3. Re-run: `$FLOWCTL opencode plan-review "$EPIC_ID" --receipt "$RECEIPT_PATH"`
+3. Re-run (use bash timeout 600000): `$FLOWCTL opencode plan-review "$EPIC_ID" --receipt "$RECEIPT_PATH"`
 4. Repeat until SHIP
 
 ---

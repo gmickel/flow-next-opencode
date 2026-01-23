@@ -76,6 +76,7 @@ Include:
 Use the `flowctl opencode impl-review` command:
 
 ```bash
+# Use bash tool timeout: 600000 (10 minutes) for review commands
 $FLOWCTL opencode impl-review "$TASK_ID" --base "$BASE_BRANCH" --receipt "$RECEIPT_PATH"
 # Output includes VERDICT=SHIP|NEEDS_WORK|MAJOR_RETHINK
 ```
@@ -101,7 +102,7 @@ EOF
 If `VERDICT=NEEDS_WORK`:
 1. Parse issues from output
 2. Fix code, commit, run tests
-3. Re-run: `$FLOWCTL opencode impl-review "$TASK_ID" --base "$BASE_BRANCH" --receipt "$RECEIPT_PATH"`
+3. Re-run (use bash timeout 600000): `$FLOWCTL opencode impl-review "$TASK_ID" --base "$BASE_BRANCH" --receipt "$RECEIPT_PATH"`
 4. Repeat until SHIP
 
 ---
