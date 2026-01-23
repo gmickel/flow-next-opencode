@@ -96,12 +96,24 @@ EOF
 import sys
 path = sys.argv[1]
 data = open(path, "r", encoding="utf-8").read()
-data = data.replace(
-    "## Description\n\nTBD\n",
-    "## Description\n\nCreate docs/smoke-task.md with a single line 'smoke ok' for opencode review.\n",
-    1,
-)
-open(path, "w", encoding="utf-8").write(data)
+lines = data.splitlines()
+desc = "Create docs/smoke-task.md with a single line 'smoke ok' for opencode review."
+for i, line in enumerate(lines):
+    if line.strip() == "## Description":
+        # Normalize to: header, blank line, description
+        insert_at = i + 1
+        if insert_at < len(lines) and lines[insert_at].strip() == "":
+            insert_at += 1
+        if insert_at < len(lines) and lines[insert_at].strip().upper() == "TBD":
+            lines[insert_at] = desc
+        else:
+            lines.insert(i + 1, "")
+            lines.insert(i + 2, desc)
+        break
+out = "\n".join(lines)
+if data.endswith("\n"):
+    out += "\n"
+open(path, "w", encoding="utf-8").write(out)
 PY
     echo "EPIC_ID=$EPIC_ID"
     echo "TASK_ID=$TASK_ID"
