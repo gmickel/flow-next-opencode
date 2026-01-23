@@ -42,6 +42,20 @@ done
 
 command -v git >/dev/null 2>&1 || { echo "git required" >&2; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "jq required" >&2; exit 1; }
+PYTHON_BIN="${PYTHON_BIN:-}"
+if [[ -n "$PYTHON_BIN" ]]; then
+  command -v "$PYTHON_BIN" >/dev/null 2>&1 || PYTHON_BIN=""
+fi
+if [[ -z "$PYTHON_BIN" ]]; then
+  if command -v python3 >/dev/null 2>&1; then PYTHON_BIN="python3"; fi
+fi
+if [[ -z "$PYTHON_BIN" ]]; then
+  if command -v python >/dev/null 2>&1; then PYTHON_BIN="python"; fi
+fi
+if [[ -z "$PYTHON_BIN" ]]; then
+  echo "python3 or python required" >&2
+  exit 1
+fi
 
 if [[ -z "$OUTDIR" ]]; then
   echo "--dir requires a path" >&2
@@ -71,11 +85,24 @@ git -C "$OUTDIR" checkout -B main >/dev/null
     ./scripts/ralph/flowctl init >/dev/null
     ACCEPT="$(mktemp /tmp/flow-next-opencode-acceptance.XXXXXX)"
     cat > "$ACCEPT" <<'EOF'
+- [ ] Create `docs/smoke-task.md` with a single line: `smoke ok`
 - [ ] Run `git status --porcelain=v1`
 - [ ] Run `git show --stat`
 EOF
     EPIC_ID="$(./scripts/ralph/flowctl epic create --title "Smoke Epic" --json | jq -r '.id')"
     TASK_ID="$(./scripts/ralph/flowctl task create --epic "$EPIC_ID" --title "Smoke Task" --acceptance-file "$ACCEPT" --json | jq -r '.id')"
+    TASK_PATH=".flow/tasks/$TASK_ID.md"
+    "$PYTHON_BIN" - "$TASK_PATH" <<'PY'
+import sys
+path = sys.argv[1]
+data = open(path, "r", encoding="utf-8").read()
+data = data.replace(
+    "## Description\n\nTBD\n",
+    "## Description\n\nCreate docs/smoke-task.md with a single line 'smoke ok' for opencode review.\n",
+    1,
+)
+open(path, "w", encoding="utf-8").write(data)
+PY
     echo "EPIC_ID=$EPIC_ID"
     echo "TASK_ID=$TASK_ID"
   fi
