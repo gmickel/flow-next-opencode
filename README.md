@@ -2,6 +2,32 @@
 
 # Flow-Next (OpenCode)
 
+**This repo is archived. Flow-Next now installs on OpenCode straight from the main repo.**
+
+</div>
+
+---
+
+> **Use [gmickel/flow-next](https://github.com/gmickel/flow-next) instead.** OpenCode gained native support for the Agent Skills standard, markdown subagents, and markdown slash commands, so the main repo now ships an installer that puts the canonical files where OpenCode reads them:
+>
+> ```bash
+> git clone --depth 1 https://github.com/gmickel/flow-next.git /tmp/flow-next-install \
+>   && /tmp/flow-next-install/scripts/install-opencode.sh \
+>   && rm -rf /tmp/flow-next-install
+> ```
+>
+> You get current flow-next on every release instead of a port that has to chase parity. Install docs and caveats: [flow-next.dev/install](https://flow-next.dev/install/#opencode). This port stops at flow-next 3.x and receives no further updates.
+
+---
+
+The original port README follows for reference.
+
+---
+
+<div align="center">
+
+# Flow-Next (OpenCode)
+
 [![Version](https://img.shields.io/badge/Version-0.2.6-green)](./CHANGELOG.md)
 [![Status](https://img.shields.io/badge/Status-Experimental-orange)](./CHANGELOG.md)
 
